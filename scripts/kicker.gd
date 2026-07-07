@@ -4,6 +4,9 @@ extends StaticBody2D
 
 @export var points := 100
 @export var kick_speed := 0.0
+## Optional per-instance texture. Set on the instance root (survives editor
+## re-saves, unlike child-node property overrides) to recolour a shared scene.
+@export var texture_override: Texture2D
 
 @onready var sprite: Sprite2D = get_node_or_null("Sprite2D")
 
@@ -14,6 +17,8 @@ var _tween: Tween
 
 func _ready() -> void:
 	if sprite:
+		if texture_override:
+			sprite.texture = texture_override
 		_base_scale = sprite.scale
 		_base_modulate = sprite.modulate
 

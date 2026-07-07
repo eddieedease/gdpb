@@ -1,7 +1,7 @@
 [gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/flipper.gd" id="1"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Part__rect834-0 (72).jpg" id="2"]
+[ext_resource type="Texture2D" path="res://assets/sprites/Part__g1457.png" id="2"]
 
 [sub_resource type="CapsuleShape2D" id="shape_flipper"]
 radius = 20.0

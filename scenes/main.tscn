@@ -1,11 +1,11 @@
-[gd_scene load_steps=23 format=3]
+[gd_scene load_steps=23 format=3 uid="uid://bb422je03c41i"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1"]
-[ext_resource type="Texture2D" path="res://assets/background/bg.jpg" id="2"]
+[ext_resource type="Texture2D" uid="uid://vb8ct7jbp516" path="res://assets/background/bg.jpg" id="2"]
 [ext_resource type="Script" path="res://scripts/camera_follow.gd" id="3"]
 [ext_resource type="Script" path="res://scripts/hud.gd" id="4"]
 [ext_resource type="Script" path="res://scripts/plunger.gd" id="5"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Part__rect834-0 (78).jpg" id="6"]
+[ext_resource type="Texture2D" uid="uid://cpawaxvxtu4t1" path="res://assets/sprites/Part__g1463.png" id="6"]
 [ext_resource type="PackedScene" path="res://scenes/bumper.tscn" id="7"]
 [ext_resource type="PackedScene" path="res://scenes/slingshot_left.tscn" id="8"]
 [ext_resource type="PackedScene" path="res://scenes/slingshot_right.tscn" id="9"]
@@ -13,10 +13,10 @@
 [ext_resource type="PackedScene" path="res://scenes/top_target.tscn" id="11"]
 [ext_resource type="PackedScene" path="res://scenes/flipper_left.tscn" id="12"]
 [ext_resource type="PackedScene" path="res://scenes/flipper_right.tscn" id="13"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Part__rect834-0 (69).jpg" id="14"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Part__rect834-0 (71).jpg" id="15"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Part__rect834-0 (59).jpg" id="16"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Part__rect834-0 (95).jpg" id="17"]
+[ext_resource type="Texture2D" path="res://assets/sprites/Part__g1454.png" id="14"]
+[ext_resource type="Texture2D" path="res://assets/sprites/Part__g1456.png" id="15"]
+[ext_resource type="Texture2D" path="res://assets/sprites/Part__g1444.png" id="16"]
+[ext_resource type="Texture2D" path="res://assets/sprites/Part__g1447.png" id="17"]
 
 [sub_resource type="PhysicsMaterial" id="pm_walls"]
 friction = 0.2
@@ -63,15 +63,11 @@ position = Vector2(200, 660)
 
 [node name="Bumper2" parent="." instance=ExtResource("7")]
 position = Vector2(460, 660)
-
-[node name="Sprite2D" parent="Bumper2" index="0"]
-texture = ExtResource("14")
+texture_override = ExtResource("14")
 
 [node name="Bumper3" parent="." instance=ExtResource("7")]
 position = Vector2(330, 860)
-
-[node name="Sprite2D" parent="Bumper3" index="0"]
-texture = ExtResource("15")
+texture_override = ExtResource("15")
 
 [node name="SlingshotLeft" parent="." instance=ExtResource("8")]
 position = Vector2(170, 1520)
@@ -84,18 +80,14 @@ position = Vector2(95, 980)
 
 [node name="TargetRight" parent="." instance=ExtResource("10")]
 position = Vector2(565, 980)
-
-[node name="Sprite2D" parent="TargetRight" index="0"]
-texture = ExtResource("16")
+texture_override = ExtResource("16")
 
 [node name="TopTargetLeft" parent="." instance=ExtResource("11")]
 position = Vector2(200, 430)
 
 [node name="TopTargetRight" parent="." instance=ExtResource("11")]
 position = Vector2(520, 430)
-
-[node name="Sprite2D" parent="TopTargetRight" index="0"]
-texture = ExtResource("17")
+texture_override = ExtResource("17")
 
 [node name="FlipperLeft" parent="." instance=ExtResource("12")]
 position = Vector2(188, 1668)
@@ -105,9 +97,7 @@ position = Vector2(472, 1668)
 
 [node name="Plunger" type="AnimatableBody2D" parent="."]
 position = Vector2(660, 1810)
-sync_to_physics = true
 script = ExtResource("5")
-floor_y = 1956.0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Plunger"]
 position = Vector2(0, -8)
@@ -150,6 +140,7 @@ theme_override_font_sizes/font_size = 40
 text = "SCORE  0"
 
 [node name="BallsLabel" type="Label" parent="HUD"]
+anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
 offset_left = -400.0
@@ -164,6 +155,7 @@ text = "BALLS  3"
 horizontal_alignment = 2
 
 [node name="HintLabel" type="Label" parent="HUD"]
+anchors_preset = 10
 anchor_right = 1.0
 offset_top = 76.0
 offset_bottom = 108.0
@@ -176,13 +168,13 @@ horizontal_alignment = 1
 
 [node name="MessageLabel" type="Label" parent="HUD"]
 visible = false
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0.08, 0.08, 0.14, 1)
 theme_override_constants/outline_size = 14
 theme_override_font_sizes/font_size = 56
-text = ""
 horizontal_alignment = 1
 vertical_alignment = 1
 
