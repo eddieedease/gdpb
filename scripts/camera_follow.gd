@@ -3,7 +3,7 @@ extends Camera2D
 
 ## Higher = more zoomed in (table appears larger/wider on screen). 1.0 = fit
 ## the full 720-wide table across the viewport.
-@export var zoom_level := 1.2
+@export var zoom_level := 1.0
 
 
 func _ready() -> void:
