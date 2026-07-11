@@ -9,8 +9,13 @@ const TABLES := [
 
 
 func _ready() -> void:
-	# Display is configured globally in project.godot (1280x720, keep_width),
-	# so the menu is correct from the first frame - no runtime scaling needed.
+	# project.godot sets this globally (correct at cold start); we set it again
+	# here so returning from the portrait Classic table restores widescreen.
+	var win := get_window()
+	win.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP_WIDTH
+	win.content_scale_size = Vector2i(1280, 720)
+
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
 	var bg := ColorRect.new()

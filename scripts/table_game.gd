@@ -24,6 +24,13 @@ var _launch_charge := 0.0
 
 
 func _ready() -> void:
+	# Widescreen, fill the whole width (the Classic table switches the window to
+	# portrait, so every scene must claim its own view on entry).
+	var win := get_window()
+	win.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP_WIDTH
+	win.content_scale_size = Vector2i(1280, 720)
+
 	GameManager.reset()
 	_drain.body_entered.connect(_on_drain_body_entered)
 
