@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Godotpinball"
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/table_select.tscn"
 config/features=PackedStringArray("4.2", "Forward Plus")
 config/icon="res://icon.svg"
 
@@ -25,7 +25,6 @@ window/size/viewport_width=720
 window/size/viewport_height=800
 window/size/mode=3
 window/stretch/mode="canvas_items"
-window/stretch/aspect="keep"
 
 [input]
 
