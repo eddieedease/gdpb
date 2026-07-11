@@ -1,12 +1,11 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=3 format=3 uid="uid://b5g85crq7ejuq"]
 
 [ext_resource type="Script" path="res://scripts/kicker.gd" id="1"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Part__g1424.png" id="2"]
+[ext_resource type="Texture2D" uid="uid://c8qqie4si0yj3" path="res://assets/sprites/Part__g1424.png" id="2"]
 
 [node name="TopTarget" type="StaticBody2D"]
 script = ExtResource("1")
 points = 200
-kick_speed = 0.0
 
 [node name="Sprite2D" type="Sprite2D" parent="."]
 scale = Vector2(0.4, 0.4)

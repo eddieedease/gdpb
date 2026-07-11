@@ -9,11 +9,8 @@ const TABLES := [
 
 
 func _ready() -> void:
-	var win := get_window()
-	win.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
-	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP_WIDTH
-	win.content_scale_size = Vector2i(1280, 720)
-
+	# Display is configured globally in project.godot (1280x720, keep_width),
+	# so the menu is correct from the first frame - no runtime scaling needed.
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
 	var bg := ColorRect.new()
@@ -21,11 +18,15 @@ func _ready() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
+	# CenterContainer truly centres its child regardless of the child's size.
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(center)
+
 	var box := VBoxContainer.new()
-	box.set_anchors_preset(Control.PRESET_CENTER)
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 22)
-	add_child(box)
+	center.add_child(box)
 
 	var title := Label.new()
 	title.text = "SELECT A TABLE"

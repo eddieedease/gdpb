@@ -1,14 +1,13 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=4 format=3 uid="uid://ddbn5tnnjfisx"]
 
 [ext_resource type="Script" path="res://scripts/kicker.gd" id="1"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Part__g1455.png" id="2"]
+[ext_resource type="Texture2D" uid="uid://cu1mcg0b4a0b1" path="res://assets/sprites/Part__g1455.png" id="2"]
 
 [sub_resource type="CircleShape2D" id="shape_bumper"]
 radius = 44.0
 
 [node name="Bumper" type="StaticBody2D"]
 script = ExtResource("1")
-points = 100
 kick_speed = 900.0
 
 [node name="Sprite2D" type="Sprite2D" parent="."]

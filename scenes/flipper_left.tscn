@@ -1,18 +1,14 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=4 format=3 uid="uid://be5ctreeg2i5i"]
 
 [ext_resource type="Script" path="res://scripts/flipper.gd" id="1"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Part__g1457.png" id="2"]
+[ext_resource type="Texture2D" uid="uid://djs5kccxjlyu8" path="res://assets/sprites/Part__g1457.png" id="2"]
 
 [sub_resource type="CapsuleShape2D" id="shape_flipper"]
 radius = 20.0
 height = 140.0
 
 [node name="FlipperLeft" type="AnimatableBody2D"]
-sync_to_physics = true
 script = ExtResource("1")
-input_action = "flipper_left"
-rest_angle_deg = 25.0
-active_angle_deg = -30.0
 
 [node name="Sprite2D" type="Sprite2D" parent="."]
 position = Vector2(56, 0)

@@ -1,7 +1,7 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=3 format=3 uid="uid://iffvuxd2dqua"]
 
 [ext_resource type="Script" path="res://scripts/kicker.gd" id="1"]
-[ext_resource type="Texture2D" path="res://assets/sprites/Part__g1460.png" id="2"]
+[ext_resource type="Texture2D" uid="uid://6vkqmbxyyk8y" path="res://assets/sprites/Part__g1460.png" id="2"]
 
 [node name="SlingshotRight" type="StaticBody2D"]
 script = ExtResource("1")
