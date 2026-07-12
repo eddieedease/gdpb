@@ -32,10 +32,7 @@ func _ready() -> void:
 	if not Engine.is_editor_hint():
 		_build_wall($Left.points)
 		_build_wall($Right.points)
-		var center := curve.tessellate(5, smoothness)
-		if center.size() >= 2:
-			_build_portal(center[0])
-			_build_portal(center[center.size() - 1])
+		_build_field()
 
 
 func _connect_curve() -> void:
@@ -123,33 +120,47 @@ func _build_wall(pts: PackedVector2Array) -> void:
 	add_child(body)
 
 
-func _build_portal(local_pos: Vector2) -> void:
-	var area := Area2D.new()
-	area.position = local_pos
-	area.collision_mask = 1 | RAMP_BIT   # detect balls whether on or off the ramp
-	var cs := CollisionShape2D.new()
-	var circ := CircleShape2D.new()
-	circ.radius = channel_width * 0.7
-	cs.shape = circ
-	area.add_child(cs)
-	add_child(area)
-	area.body_entered.connect(_on_portal)
-
-
-func _on_portal(body: Node) -> void:
-	if not body.is_in_group("ball"):
+# A single Area2D covering the whole channel interior. The ball is "on the
+# ramp" exactly while it is inside this field; leaving it by ANY route (mouth,
+# side, whatever) restores normal collision, so the ball can never get stranded
+# on the ramp layer and fly off-screen.
+func _build_field() -> void:
+	var left: PackedVector2Array = $Left.points
+	var right: PackedVector2Array = $Right.points
+	if left.size() < 2 or right.size() < 2:
 		return
-	if body.get_meta("on_ramp", false):
-		# leave the ramp -> back to normal play
-		body.collision_layer = 1
-		body.collision_mask = 1
-		body.z_index = 0
-		body.set_meta("on_ramp", false)
-	else:
-		# board the ramp -> ride over the playfield
-		body.collision_layer = RAMP_BIT
-		body.collision_mask = RAMP_BIT
-		body.z_index = 10
-		body.set_meta("on_ramp", true)
-		if ramp_score > 0:
-			GameManager.add_score(ramp_score)
+	var poly := PackedVector2Array()
+	poly.append_array(left)
+	for i in range(right.size() - 1, -1, -1):
+		poly.append(right[i])
+	var area := Area2D.new()
+	area.name = "Field"
+	area.collision_mask = 1 | RAMP_BIT   # detect the ball whether on or off the ramp
+	var cp := CollisionPolygon2D.new()
+	cp.polygon = poly
+	area.add_child(cp)
+	add_child(area)
+	area.body_entered.connect(_on_field_entered)
+	area.body_exited.connect(_on_field_exited)
+
+
+func _on_field_entered(body: Node) -> void:
+	if not body.is_in_group("ball") or body.get_meta("on_ramp", false):
+		return
+	# board the ramp -> ride over the playfield (but keep colliding with the
+	# ramp walls so it stays guided)
+	body.collision_layer = RAMP_BIT
+	body.collision_mask = RAMP_BIT
+	body.z_index = 10
+	body.set_meta("on_ramp", true)
+	if ramp_score > 0:
+		GameManager.add_score(ramp_score)
+
+
+func _on_field_exited(body: Node) -> void:
+	if not body.is_in_group("ball") or not body.get_meta("on_ramp", false):
+		return
+	body.collision_layer = 1
+	body.collision_mask = 1
+	body.z_index = 0
+	body.set_meta("on_ramp", false)

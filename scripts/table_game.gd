@@ -81,6 +81,15 @@ func _physics_process(delta: float) -> void:
 	var ball := _get_ball()
 	if ball == null:
 		return
+	# Safety net: a ball that escaped the table (e.g. stranded on a ramp layer)
+	# must never be lost off-screen. Restore normal collision and drain it.
+	if _out_of_bounds(ball):
+		ball.collision_layer = 1
+		ball.collision_mask = 1
+		ball.z_index = 0
+		ball.set_meta("on_ramp", false)
+		_on_drain_body_entered(ball)
+		return
 	var in_lane := ball.global_position.x > lane_min.x and ball.global_position.y > lane_min.y
 	if in_lane and Input.is_action_pressed("launch"):
 		_launch_charge = minf(_launch_charge + delta / 1.1, 1.0)
@@ -88,6 +97,11 @@ func _physics_process(delta: float) -> void:
 		var sp := lerpf(launch_min_speed, launch_max_speed, _launch_charge)
 		ball.linear_velocity = launch_direction.normalized() * sp
 		_launch_charge = 0.0
+
+
+func _out_of_bounds(ball: RigidBody2D) -> bool:
+	var p := ball.global_position
+	return p.x < -80.0 or p.x > 1360.0 or p.y < -80.0 or p.y > 2640.0
 
 
 func _on_drain_body_entered(body: Node) -> void:
