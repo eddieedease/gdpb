@@ -40,6 +40,7 @@ size = Vector2(1280, 2560)
 
 [node name="AdvancedTable" type="Node2D"]
 script = ExtResource("1_00vba")
+launch_max_speed = 4000.0
 
 [node name="Camera2D" type="Camera2D" parent="."]
 position = Vector2(640, 400)
@@ -66,7 +67,7 @@ points = PackedVector2Array(300, 110, 980, 110, 980, 110, 1001.27, 111.195, 1022
 points = PackedVector2Array(1170, 300, 1170, 2440, 1060, 2440)
 
 [node name="ShooterInner" parent="." instance=ExtResource("5_6qs8c")]
-points = PackedVector2Array(1060, 2380, 1060, 1980, 1030, 1900, 960, 2130, 810, 2400)
+points = PackedVector2Array(1060, 2380, 1060, 1980, 1028, 1941, 960, 2130, 810, 2400)
 
 [node name="Deflector" parent="." instance=ExtResource("5_6qs8c")]
 points = PackedVector2Array(1170, 360, 1010, 300)
@@ -120,10 +121,13 @@ modulate = Color(0.7, 0.85, 1, 1)
 position = Vector2(980, 1360)
 
 [node name="SlingshotLeft" parent="." instance=ExtResource("9_kus3o")]
-position = Vector2(365, 2040)
+position = Vector2(467, 2121)
+rotation = -1.72514
 
 [node name="SlingshotRight" parent="." instance=ExtResource("10_4c6oi")]
-position = Vector2(915, 2040)
+position = Vector2(807, 2120)
+rotation = -1.48766
+scale = Vector2(1, -1)
 
 [node name="DropTarget0" type="StaticBody2D" parent="." groups=["drop_targets"]]
 position = Vector2(500, 1010)
@@ -170,11 +174,11 @@ color = Color(1, 0.55, 0.25, 1)
 polygon = PackedVector2Array(-32, -17, 32, -17, 32, 17, -32, 17)
 
 [node name="FlipperMainLeft" parent="." instance=ExtResource("12_78gja")]
-position = Vector2(500, 2380)
+position = Vector2(472, 2424)
 rotate_speed = 15.0
 
 [node name="FlipperMainRight" parent="." instance=ExtResource("14_3tj61")]
-position = Vector2(780, 2380)
+position = Vector2(817, 2424)
 rotate_speed = 15.0
 
 [node name="FlipperUpperLeft" parent="." instance=ExtResource("12_78gja")]
@@ -227,4 +231,5 @@ gravity_space_override = 3
 gravity = 1500.0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="GravityZone"]
+visible = false
 shape = SubResource("RectangleShape2D_dqafr")
