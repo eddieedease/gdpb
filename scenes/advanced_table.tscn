@@ -121,11 +121,11 @@ modulate = Color(0.7, 0.85, 1, 1)
 position = Vector2(980, 1360)
 
 [node name="SlingshotLeft" parent="." instance=ExtResource("9_kus3o")]
-position = Vector2(467, 2121)
+position = Vector2(504, 2163)
 rotation = -1.72514
 
 [node name="SlingshotRight" parent="." instance=ExtResource("10_4c6oi")]
-position = Vector2(807, 2120)
+position = Vector2(767, 2160)
 rotation = -1.48766
 scale = Vector2(1, -1)
 
