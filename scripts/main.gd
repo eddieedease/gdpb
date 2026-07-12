@@ -19,6 +19,22 @@ func _spawn_ball() -> void:
 	add_child(ball)
 
 
+func _physics_process(_delta: float) -> void:
+	if Input.is_action_just_pressed("nudge_left"):
+		_nudge(-1.0)
+	if Input.is_action_just_pressed("nudge_right"):
+		_nudge(1.0)
+
+
+func _nudge(dir: float) -> void:
+	for b in get_tree().get_nodes_in_group("ball"):
+		if b is RigidBody2D:
+			b.apply_central_impulse(Vector2(dir * 300.0, -90.0))
+	var cam := get_node_or_null("Camera2D")
+	if cam and cam.has_method("shake"):
+		cam.shake(11.0)
+
+
 func _on_drain_body_entered(body: Node) -> void:
 	if not body.is_in_group("ball"):
 		return

@@ -16,6 +16,7 @@ func _ready() -> void:
 	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP_WIDTH
 	win.content_scale_size = Vector2i(1280, 720)
 
+	_add_joypad_ui_nav()
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
 	var bg := ColorRect.new()
@@ -67,3 +68,45 @@ func _ready() -> void:
 
 func _on_table_chosen(scene_path: String) -> void:
 	get_tree().change_scene_to_file(scene_path)
+
+
+## Godot's built-in ui_* nav actions have no gamepad bindings in this project,
+## so add them (D-pad + left stick to move, A to select, B to go back). Runs
+## once - InputMap is global and persists across scene changes.
+func _add_joypad_ui_nav() -> void:
+	if _action_has_joypad("ui_accept"):
+		return
+	_add_joy_button("ui_accept", JOY_BUTTON_A)
+	_add_joy_button("ui_cancel", JOY_BUTTON_B)
+	_add_joy_button("ui_up", JOY_BUTTON_DPAD_UP)
+	_add_joy_button("ui_down", JOY_BUTTON_DPAD_DOWN)
+	_add_joy_button("ui_left", JOY_BUTTON_DPAD_LEFT)
+	_add_joy_button("ui_right", JOY_BUTTON_DPAD_RIGHT)
+	_add_joy_axis("ui_up", JOY_AXIS_LEFT_Y, -1.0)
+	_add_joy_axis("ui_down", JOY_AXIS_LEFT_Y, 1.0)
+
+
+func _action_has_joypad(action: String) -> bool:
+	if not InputMap.has_action(action):
+		return false
+	for e in InputMap.action_get_events(action):
+		if e is InputEventJoypadButton or e is InputEventJoypadMotion:
+			return true
+	return false
+
+
+func _add_joy_button(action: String, btn: int) -> void:
+	if not InputMap.has_action(action):
+		return
+	var e := InputEventJoypadButton.new()
+	e.button_index = btn
+	InputMap.action_add_event(action, e)
+
+
+func _add_joy_axis(action: String, axis: int, value: float) -> void:
+	if not InputMap.has_action(action):
+		return
+	var e := InputEventJoypadMotion.new()
+	e.axis = axis
+	e.axis_value = value
+	InputMap.action_add_event(action, e)

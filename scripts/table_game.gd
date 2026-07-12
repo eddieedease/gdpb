@@ -13,6 +13,8 @@ const BALL_SCENE := preload("res://scenes/ball.tscn")
 ## Very slight leftward tilt; the top deflector does most of the work steering
 ## the ball into the playfield.
 @export var launch_direction := Vector2(-0.04, -1.0)
+## Sideways shove applied to the ball(s) by a nudge (Q/E or the sticks).
+@export var nudge_impulse := 320.0
 
 ## One-way gate (scenes/gate.tscn) dropped at the mouth of the shooter lane:
 ## the ball passes up through it on launch, then can never fall back in. Tilt
@@ -90,6 +92,10 @@ func _physics_process(delta: float) -> void:
 		ball.set_meta("on_ramp", false)
 		_on_drain_body_entered(ball)
 		return
+	if Input.is_action_just_pressed("nudge_left"):
+		_nudge(-1.0)
+	if Input.is_action_just_pressed("nudge_right"):
+		_nudge(1.0)
 	var in_lane := ball.global_position.x > lane_min.x and ball.global_position.y > lane_min.y
 	if in_lane and Input.is_action_pressed("launch"):
 		_launch_charge = minf(_launch_charge + delta / 1.1, 1.0)
@@ -97,6 +103,15 @@ func _physics_process(delta: float) -> void:
 		var sp := lerpf(launch_min_speed, launch_max_speed, _launch_charge)
 		ball.linear_velocity = launch_direction.normalized() * sp
 		_launch_charge = 0.0
+
+
+func _nudge(dir: float) -> void:
+	for b in get_tree().get_nodes_in_group("ball"):
+		if b is RigidBody2D:
+			b.apply_central_impulse(Vector2(dir * nudge_impulse, -nudge_impulse * 0.3))
+	var cam := get_node_or_null("Camera2D")
+	if cam and cam.has_method("shake"):
+		cam.shake(11.0)
 
 
 func _out_of_bounds(ball: RigidBody2D) -> bool:
