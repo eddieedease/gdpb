@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=3 uid="uid://de7wf1jlalml7"]
+[gd_scene load_steps=23 format=3 uid="uid://de7wf1jlalml7"]
 
 [ext_resource type="Script" path="res://scripts/table_game.gd" id="1_00vba"]
 [ext_resource type="Script" path="res://scripts/camera_follow.gd" id="2_0ua1b"]
@@ -10,6 +10,9 @@
 [ext_resource type="Script" path="res://scripts/drop_target.gd" id="11_doqff"]
 [ext_resource type="PackedScene" uid="uid://be5ctreeg2i5i" path="res://scenes/flipper_left.tscn" id="12_78gja"]
 [ext_resource type="PackedScene" uid="uid://yehdbnn32jj1" path="res://scenes/flipper_right.tscn" id="14_3tj61"]
+[ext_resource type="PackedScene" path="res://scenes/gate.tscn" id="15_gate"]
+[ext_resource type="PackedScene" path="res://scenes/rail.tscn" id="16_rail"]
+[ext_resource type="PackedScene" path="res://scenes/ramp.tscn" id="17_ramp"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_pxcm0"]
 size = Vector2(64, 34)
@@ -233,3 +236,13 @@ gravity = 1500.0
 [node name="CollisionShape2D" type="CollisionShape2D" parent="GravityZone"]
 visible = false
 shape = SubResource("RectangleShape2D_dqafr")
+
+[node name="LaneGate" parent="." instance=ExtResource("15_gate")]
+position = Vector2(1115, 1895)
+rotation = -0.12
+
+[node name="ExampleRail" parent="." instance=ExtResource("16_rail")]
+position = Vector2(280, 900)
+
+[node name="ExampleRamp" parent="." instance=ExtResource("17_ramp")]
+position = Vector2(640, 1560)
