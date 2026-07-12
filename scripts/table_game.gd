@@ -14,12 +14,11 @@ const BALL_SCENE := preload("res://scenes/ball.tscn")
 ## the ball into the playfield.
 @export var launch_direction := Vector2(-0.04, -1.0)
 
-## One-way gate at the mouth of the shooter lane: the ball passes up through it
-## on launch, then can never fall back into the lane.
+## One-way gate (scenes/gate.tscn) dropped at the mouth of the shooter lane:
+## the ball passes up through it on launch, then can never fall back in. Tilt
+## keeps a ball that lands on it rolling off into the playfield.
+const GATE_SCENE := preload("res://scenes/gate.tscn")
 @export var gate_position := Vector2(1115, 1895)
-@export var gate_width := 165.0
-## Slight tilt (left end lower) so a ball that lands on the gate rolls off into
-## the playfield instead of resting on it.
 @export var gate_rotation := -0.12
 
 @onready var _spawn: Node2D = $BallSpawn
@@ -55,23 +54,13 @@ func _ready() -> void:
 
 
 func _build_gate() -> void:
-	# A one-way collision: the ball passes through moving up (out of the lane)
-	# but is blocked coming down, so it can't re-enter the launch lane.
-	var gate := StaticBody2D.new()
+	# Skip if the scene already contains a hand-placed gate node.
+	if has_node("LaneGate"):
+		return
+	var gate: Node2D = GATE_SCENE.instantiate()
 	gate.name = "LaneGate"
 	gate.position = gate_position
 	gate.rotation = gate_rotation
-	var cs := CollisionShape2D.new()
-	var shape := RectangleShape2D.new()
-	shape.size = Vector2(gate_width, 12.0)
-	cs.shape = shape
-	cs.one_way_collision = true
-	gate.add_child(cs)
-	var line := Line2D.new()
-	line.points = PackedVector2Array([Vector2(-gate_width * 0.5, 0), Vector2(gate_width * 0.5, 0)])
-	line.width = 5.0
-	line.default_color = Color(0.5, 0.85, 0.95, 0.5)
-	gate.add_child(line)
 	add_child(gate)
 
 

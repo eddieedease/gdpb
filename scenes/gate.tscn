@@ -1,0 +1,17 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="RectangleShape2D" id="rect"]
+size = Vector2(165, 12)
+
+[node name="Gate" type="StaticBody2D"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("rect")
+one_way_collision = true
+
+[node name="Line2D" type="Line2D" parent="."]
+points = PackedVector2Array(-82, 0, 82, 0)
+width = 6.0
+default_color = Color(0.5, 0.85, 0.95, 0.6)
+begin_cap_mode = 2
+end_cap_mode = 2
