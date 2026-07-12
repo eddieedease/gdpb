@@ -101,11 +101,11 @@ position = Vector2(640, 885)
 
 [node name="Bumper4" parent="." instance=ExtResource("7_t1bve")]
 modulate = Color(0.7, 0.85, 1, 1)
-position = Vector2(505, 1314)
+position = Vector2(416, 1314)
 
 [node name="Bumper5" parent="." instance=ExtResource("7_t1bve")]
 modulate = Color(1, 0.7, 0.8, 1)
-position = Vector2(775, 1314)
+position = Vector2(861, 1314)
 
 [node name="Bumper6" parent="." instance=ExtResource("7_t1bve")]
 modulate = Color(1, 0.85, 0.6, 1)
@@ -113,18 +113,18 @@ position = Vector2(640, 1166)
 
 [node name="Bumper7" parent="." instance=ExtResource("7_t1bve")]
 modulate = Color(0.8, 1, 0.85, 1)
-position = Vector2(300, 1064)
+position = Vector2(312, 1070)
 
 [node name="Bumper8" parent="." instance=ExtResource("7_t1bve")]
 modulate = Color(0.7, 0.85, 1, 1)
 position = Vector2(980, 1064)
 
 [node name="SlingshotLeft" parent="." instance=ExtResource("9_kus3o")]
-position = Vector2(428, 1961)
+position = Vector2(409, 1957)
 rotation = -1.72514
 
 [node name="SlingshotRight" parent="." instance=ExtResource("10_4c6oi")]
-position = Vector2(816, 1951)
+position = Vector2(897, 1955)
 rotation = -1.48766
 scale = Vector2(1, -1)
 
@@ -215,8 +215,8 @@ position = Vector2(1107, 1920)
 rotation = -0.12
 
 [node name="ExampleRail" parent="." instance=ExtResource("16_rail")]
-position = Vector2(242, 1110)
+position = Vector2(338, 782)
 rotation = -1.5708
 
 [node name="ExampleRamp" parent="." instance=ExtResource("17_ramp")]
-position = Vector2(640, 734)
+position = Vector2(640, 899)
