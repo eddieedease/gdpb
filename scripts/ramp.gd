@@ -56,7 +56,7 @@ func _refresh() -> void:
 
 
 func _offset(pts: PackedVector2Array, d: float) -> PackedVector2Array:
-	var out := PackedVector2Array()
+	var raw := PackedVector2Array()
 	var n := pts.size()
 	for i in n:
 		var dir: Vector2
@@ -69,8 +69,36 @@ func _offset(pts: PackedVector2Array, d: float) -> PackedVector2Array:
 		if dir.length() < 0.001:
 			dir = Vector2.RIGHT
 		dir = dir.normalized()
-		out.append(pts[i] + Vector2(-dir.y, dir.x) * d)
+		raw.append(pts[i] + Vector2(-dir.y, dir.x) * d)
+	return _remove_loops(raw)
+
+
+## Drop self-intersection loops so a tight bend's inner wall stays smooth.
+func _remove_loops(pts: PackedVector2Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for p in pts:
+		out.append(p)
+		var m := out.size()
+		if m < 4:
+			continue
+		for j in range(m - 3):
+			if _segments_cross(out[m - 2], out[m - 1], out[j], out[j + 1]):
+				var keep := out.slice(0, j + 1)
+				keep.append(out[m - 1])
+				out = keep
+				break
 	return out
+
+
+func _segments_cross(a: Vector2, b: Vector2, c: Vector2, e: Vector2) -> bool:
+	var r := b - a
+	var s := e - c
+	var rxs := r.cross(s)
+	if absf(rxs) < 0.0001:
+		return false
+	var t := (c - a).cross(s) / rxs
+	var u := (c - a).cross(r) / rxs
+	return t > 0.01 and t < 0.99 and u > 0.01 and u < 0.99
 
 
 func _build_wall(pts: PackedVector2Array) -> void:

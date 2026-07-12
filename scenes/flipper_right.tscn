@@ -4,7 +4,6 @@
 [ext_resource type="Texture2D" uid="uid://qsoxq01ml4y8" path="res://assets/sprites/Part__g1458.png" id="2"]
 
 [node name="FlipperRight" type="AnimatableBody2D"]
-sync_to_physics = true
 script = ExtResource("1")
 input_action = "flipper_right"
 rest_angle_deg = -25.0
