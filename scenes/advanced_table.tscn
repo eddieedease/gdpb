@@ -124,11 +124,11 @@ modulate = Color(0.7, 0.85, 1, 1)
 position = Vector2(980, 1360)
 
 [node name="SlingshotLeft" parent="." instance=ExtResource("9_kus3o")]
-position = Vector2(504, 2163)
+position = Vector2(504, 2080)
 rotation = -1.72514
 
 [node name="SlingshotRight" parent="." instance=ExtResource("10_4c6oi")]
-position = Vector2(767, 2160)
+position = Vector2(767, 2077)
 rotation = -1.48766
 scale = Vector2(1, -1)
 
@@ -178,19 +178,19 @@ polygon = PackedVector2Array(-32, -17, 32, -17, 32, 17, -32, 17)
 
 [node name="FlipperMainLeft" parent="." instance=ExtResource("12_78gja")]
 position = Vector2(472, 2424)
-rotate_speed = 15.0
+rotate_speed = 19.0
 
 [node name="FlipperMainRight" parent="." instance=ExtResource("14_3tj61")]
 position = Vector2(817, 2424)
-rotate_speed = 15.0
+rotate_speed = 19.0
 
 [node name="FlipperUpperLeft" parent="." instance=ExtResource("12_78gja")]
 position = Vector2(380, 1380)
-rotate_speed = 15.0
+rotate_speed = 19.0
 
 [node name="FlipperUpperRight" parent="." instance=ExtResource("14_3tj61")]
 position = Vector2(900, 1380)
-rotate_speed = 15.0
+rotate_speed = 19.0
 
 [node name="Rollover0" type="Area2D" parent="." groups=["rollovers"]]
 position = Vector2(430, 250)
@@ -242,7 +242,8 @@ position = Vector2(1115, 1895)
 rotation = -0.12
 
 [node name="ExampleRail" parent="." instance=ExtResource("16_rail")]
-position = Vector2(280, 900)
+position = Vector2(180, 1050)
+rotation = -1.5708
 
 [node name="ExampleRamp" parent="." instance=ExtResource("17_ramp")]
-position = Vector2(640, 1560)
+position = Vector2(640, 560)

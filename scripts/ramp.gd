@@ -19,6 +19,8 @@ const RAMP_BIT := 1 << 3  # physics layer 4, reserved for ramps
 		smoothness = v
 		_refresh()
 @export var wall_bounce := 0.15
+## Points awarded once each time a ball boards the ramp (0 = no scoring).
+@export var ramp_score := 2000
 
 @onready var _left: Line2D = $Left
 @onready var _right: Line2D = $Right
@@ -121,3 +123,5 @@ func _on_portal(body: Node) -> void:
 		body.collision_mask = RAMP_BIT
 		body.z_index = 10
 		body.set_meta("on_ramp", true)
+		if ramp_score > 0:
+			GameManager.add_score(ramp_score)
