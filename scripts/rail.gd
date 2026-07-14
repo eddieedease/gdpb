@@ -21,12 +21,16 @@ extends Path2D
 @onready var _right: Line2D = $Right
 
 
+var _sound_cooldown := 0.0
+
+
 func _ready() -> void:
 	_connect_curve()
 	_refresh()
 	if not Engine.is_editor_hint():
 		_build_collision($Left.points)
 		_build_collision($Right.points)
+		_build_sound_field()
 
 
 func _connect_curve() -> void:
@@ -114,3 +118,33 @@ func _build_collision(pts: PackedVector2Array) -> void:
 	cs.shape = shape
 	body.add_child(cs)
 	add_child(body)
+
+
+## A sound-only Area2D covering the channel interior - unlike Ramp, rails don't
+## switch physics layers (the ball stays guided by ordinary walls), so this
+## exists purely to trigger the "entering a rail" whoosh.
+func _build_sound_field() -> void:
+	var left: PackedVector2Array = $Left.points
+	var right: PackedVector2Array = $Right.points
+	if left.size() < 2 or right.size() < 2:
+		return
+	var poly := PackedVector2Array()
+	poly.append_array(left)
+	for i in range(right.size() - 1, -1, -1):
+		poly.append(right[i])
+	var area := Area2D.new()
+	area.name = "SoundField"
+	area.collision_mask = 1
+	var cp := CollisionPolygon2D.new()
+	cp.polygon = poly
+	area.add_child(cp)
+	add_child(area)
+	area.body_entered.connect(_on_sound_field_entered)
+
+
+func _on_sound_field_entered(body: Node) -> void:
+	if not body.is_in_group("ball") or _sound_cooldown > 0.0:
+		return
+	SoundManager.play("whoosh")
+	_sound_cooldown = 0.5
+	get_tree().create_timer(_sound_cooldown).timeout.connect(func(): _sound_cooldown = 0.0)

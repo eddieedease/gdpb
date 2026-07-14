@@ -1,18 +1,19 @@
-[gd_scene load_steps=21 format=3 uid="uid://de7wf1jlalml7"]
+[gd_scene format=3 uid="uid://de7wf1jlalml7"]
 
-[ext_resource type="Script" path="res://scripts/table_game.gd" id="1_00vba"]
-[ext_resource type="Script" path="res://scripts/camera_follow.gd" id="2_0ua1b"]
+[ext_resource type="Script" uid="uid://yx5rt48kvpxe" path="res://scripts/table_game.gd" id="1_00vba"]
+[ext_resource type="Script" uid="uid://cjhqaf0vcsqun" path="res://scripts/camera_follow.gd" id="2_0ua1b"]
 [ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="3_6iro6"]
 [ext_resource type="PackedScene" uid="uid://dai16lf6ew7j4" path="res://scenes/wall.tscn" id="5_6qs8c"]
 [ext_resource type="PackedScene" uid="uid://ddbn5tnnjfisx" path="res://scenes/bumper.tscn" id="7_t1bve"]
 [ext_resource type="PackedScene" uid="uid://c7k35ukp14lr7" path="res://scenes/slingshot_left.tscn" id="9_kus3o"]
 [ext_resource type="PackedScene" uid="uid://iffvuxd2dqua" path="res://scenes/slingshot_right.tscn" id="10_4c6oi"]
-[ext_resource type="Script" path="res://scripts/drop_target.gd" id="11_doqff"]
+[ext_resource type="Script" uid="uid://c2rof1dtyk4t8" path="res://scripts/drop_target.gd" id="11_doqff"]
 [ext_resource type="PackedScene" uid="uid://be5ctreeg2i5i" path="res://scenes/flipper_left.tscn" id="12_78gja"]
 [ext_resource type="PackedScene" uid="uid://yehdbnn32jj1" path="res://scenes/flipper_right.tscn" id="14_3tj61"]
 [ext_resource type="PackedScene" path="res://scenes/gate.tscn" id="15_gate"]
 [ext_resource type="PackedScene" path="res://scenes/rail.tscn" id="16_rail"]
 [ext_resource type="PackedScene" path="res://scenes/ramp.tscn" id="17_ramp"]
+[ext_resource type="Shader" uid="uid://d12524mor7q2y" path="res://shaders/vignette.gdshader" id="18_vignette"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_a0uye"]
 size = Vector2(64, 34)
@@ -35,11 +36,19 @@ size = Vector2(1280, 80)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_dqafr"]
 size = Vector2(1280, 2560)
 
-[node name="AdvancedTable" type="Node2D"]
+[sub_resource type="ShaderMaterial" id="shader_vignette"]
+shader = ExtResource("18_vignette")
+shader_parameter/strength = 0.4
+shader_parameter/radius = 1.05
+shader_parameter/softness = 0.55
+shader_parameter/tint = Color(0.05, 0.03, 0.1, 1)
+shader_parameter/glow_strength = 0.05
+
+[node name="AdvancedTable" type="Node2D" unique_id=1528581958]
 script = ExtResource("1_00vba")
 launch_max_speed = 4000.0
 
-[node name="Camera2D" type="Camera2D" parent="."]
+[node name="Camera2D" type="Camera2D" parent="." unique_id=1862567166]
 position = Vector2(640, 400)
 limit_left = 0
 limit_top = 0
@@ -49,174 +58,188 @@ position_smoothing_enabled = true
 position_smoothing_speed = 8.0
 script = ExtResource("2_0ua1b")
 
-[node name="HUD" parent="." instance=ExtResource("3_6iro6")]
+[node name="HUD" parent="." unique_id=448338354 instance=ExtResource("3_6iro6")]
 
-[node name="BallSpawn" type="Marker2D" parent="."]
+[node name="BallSpawn" type="Marker2D" parent="." unique_id=257382769]
 position = Vector2(1120, 2360)
 
-[node name="WallLeft" parent="." instance=ExtResource("5_6qs8c")]
+[node name="WallLeft" parent="." unique_id=1669833305 instance=ExtResource("5_6qs8c")]
 points = PackedVector2Array(470, 2400, 150, 2010, 110, 1900, 110, 300, 111.195, 278.727, 114.764, 257.721, 120.662, 237.247, 128.816, 217.562, 139.122, 198.914, 151.452, 181.537, 165.65, 165.65, 181.537, 151.452, 198.914, 139.122, 217.562, 128.816, 237.247, 120.662, 257.721, 114.764, 278.727, 111.195, 300, 110)
 
-[node name="WallTop" parent="." instance=ExtResource("5_6qs8c")]
+[node name="WallTop" parent="." unique_id=1008846114 instance=ExtResource("5_6qs8c")]
 points = PackedVector2Array(300, 110, 980, 110, 980, 110, 1001.27, 111.195, 1022.28, 114.764, 1042.75, 120.662, 1062.44, 128.816, 1081.09, 139.122, 1098.46, 151.452, 1114.35, 165.65, 1128.55, 181.537, 1140.88, 198.914, 1151.18, 217.562, 1159.34, 237.247, 1165.24, 257.721, 1168.81, 278.727, 1170, 300)
 
-[node name="ShooterOuter" parent="." instance=ExtResource("5_6qs8c")]
+[node name="ShooterOuter" parent="." unique_id=1908480786 instance=ExtResource("5_6qs8c")]
 points = PackedVector2Array(1170, 300, 1170, 2440, 1060, 2440)
 
-[node name="ShooterInner" parent="." instance=ExtResource("5_6qs8c")]
+[node name="ShooterInner" parent="." unique_id=2095574073 instance=ExtResource("5_6qs8c")]
 points = PackedVector2Array(1060, 2380, 1060, 1980, 1028, 1941, 960, 2130, 810, 2400)
 
-[node name="Deflector" parent="." instance=ExtResource("5_6qs8c")]
+[node name="Deflector" parent="." unique_id=1949412675 instance=ExtResource("5_6qs8c")]
 points = PackedVector2Array(1170, 360, 1028.87, 307.075, 1032, 123)
 
-[node name="OrbitLeft" parent="." instance=ExtResource("5_6qs8c")]
+[node name="OrbitLeft" parent="." unique_id=1952455411 instance=ExtResource("5_6qs8c")]
 points = PackedVector2Array(255.016, 441.458, 277.529, 434.808, 300.689, 430.984, 324.145, 430.045, 347.537, 432.006, 370.509, 436.837, 392.71, 444.463, 413.801, 454.769, 433.46, 467.597, 451.387, 482.751, 467.309, 500, 480.983, 519.081, 492.198, 539.703)
 
-[node name="OrbitRight" parent="." instance=ExtResource("5_6qs8c")]
+[node name="OrbitRight" parent="." unique_id=1940209503 instance=ExtResource("5_6qs8c")]
 points = PackedVector2Array(782.776, 615, 792.904, 599.477, 804.663, 585.15, 817.911, 572.187, 832.492, 560.744, 848.232, 550.956, 864.944, 542.94, 882.429, 536.792, 900.48, 532.583, 918.881, 530.364, 937.415, 530.162, 955.861, 531.979, 973.999, 535.793)
 
-[node name="LedgeLeft" parent="." instance=ExtResource("5_6qs8c")]
+[node name="LedgeLeft" parent="." unique_id=31293273 instance=ExtResource("5_6qs8c")]
 position = Vector2(0, -296)
 points = PackedVector2Array(250, 1440, 374, 1420)
 
-[node name="LedgeRight" parent="." instance=ExtResource("5_6qs8c")]
+[node name="LedgeRight" parent="." unique_id=883286112 instance=ExtResource("5_6qs8c")]
 position = Vector2(0, -296)
 points = PackedVector2Array(1030, 1440, 906, 1420)
 
-[node name="Bumper0" parent="." instance=ExtResource("7_t1bve")]
+[node name="Bumper0" parent="." unique_id=941541461 instance=ExtResource("7_t1bve")]
 modulate = Color(0.7, 0.85, 1, 1)
 position = Vector2(640, 430)
 
-[node name="Bumper1" parent="." instance=ExtResource("7_t1bve")]
+[node name="Bumper1" parent="." unique_id=1606619932 instance=ExtResource("7_t1bve")]
 modulate = Color(1, 0.7, 0.8, 1)
 position = Vector2(470, 590)
 
-[node name="Bumper2" parent="." instance=ExtResource("7_t1bve")]
+[node name="Bumper2" parent="." unique_id=1613699457 instance=ExtResource("7_t1bve")]
 modulate = Color(1, 0.85, 0.6, 1)
 position = Vector2(810, 590)
 
-[node name="Bumper3" parent="." instance=ExtResource("7_t1bve")]
+[node name="Bumper3" parent="." unique_id=313051755 instance=ExtResource("7_t1bve")]
 modulate = Color(0.8, 1, 0.85, 1)
 position = Vector2(640, 885)
 
-[node name="Bumper4" parent="." instance=ExtResource("7_t1bve")]
+[node name="Bumper4" parent="." unique_id=260161831 instance=ExtResource("7_t1bve")]
 modulate = Color(0.7, 0.85, 1, 1)
 position = Vector2(416, 1314)
 
-[node name="Bumper5" parent="." instance=ExtResource("7_t1bve")]
+[node name="Bumper5" parent="." unique_id=1060733133 instance=ExtResource("7_t1bve")]
 modulate = Color(1, 0.7, 0.8, 1)
 position = Vector2(861, 1314)
 
-[node name="Bumper6" parent="." instance=ExtResource("7_t1bve")]
+[node name="Bumper6" parent="." unique_id=192596124 instance=ExtResource("7_t1bve")]
 modulate = Color(1, 0.85, 0.6, 1)
 position = Vector2(640, 1166)
 
-[node name="Bumper7" parent="." instance=ExtResource("7_t1bve")]
+[node name="Bumper7" parent="." unique_id=1159808320 instance=ExtResource("7_t1bve")]
 modulate = Color(0.8, 1, 0.85, 1)
 position = Vector2(312, 1070)
 
-[node name="Bumper8" parent="." instance=ExtResource("7_t1bve")]
+[node name="Bumper8" parent="." unique_id=529326980 instance=ExtResource("7_t1bve")]
 modulate = Color(0.7, 0.85, 1, 1)
 position = Vector2(980, 1064)
 
-[node name="SlingshotLeft" parent="." instance=ExtResource("9_kus3o")]
+[node name="SlingshotLeft" parent="." unique_id=1598665447 instance=ExtResource("9_kus3o")]
 position = Vector2(409, 1957)
 rotation = -1.72514
 
-[node name="SlingshotRight" parent="." instance=ExtResource("10_4c6oi")]
+[node name="SlingshotRight" parent="." unique_id=1673090969 instance=ExtResource("10_4c6oi")]
 position = Vector2(897, 1955)
 rotation = -1.48766
 scale = Vector2(1, -1)
 
-[node name="DropTarget1" type="StaticBody2D" parent="." groups=["drop_targets"]]
+[node name="DropTarget1" type="StaticBody2D" parent="." unique_id=705315852 groups=["drop_targets"]]
 position = Vector2(600, 711)
 script = ExtResource("11_doqff")
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="DropTarget1"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="DropTarget1" unique_id=366264189]
 shape = SubResource("RectangleShape2D_a0uye")
 
-[node name="Visual" type="Polygon2D" parent="DropTarget1"]
+[node name="Visual" type="Polygon2D" parent="DropTarget1" unique_id=1160255204]
 color = Color(1, 0.55, 0.25, 1)
 polygon = PackedVector2Array(-32, -17, 32, -17, 32, 17, -32, 17)
 
-[node name="DropTarget2" type="StaticBody2D" parent="." groups=["drop_targets"]]
+[node name="DropTarget2" type="StaticBody2D" parent="." unique_id=1610612860 groups=["drop_targets"]]
 position = Vector2(700, 711)
 script = ExtResource("11_doqff")
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="DropTarget2"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="DropTarget2" unique_id=1607439215]
 shape = SubResource("RectangleShape2D_k4m7e")
 
-[node name="Visual" type="Polygon2D" parent="DropTarget2"]
+[node name="Visual" type="Polygon2D" parent="DropTarget2" unique_id=1517307668]
 color = Color(1, 0.55, 0.25, 1)
 polygon = PackedVector2Array(-32, -17, 32, -17, 32, 17, -32, 17)
 
-[node name="FlipperMainLeft" parent="." instance=ExtResource("12_78gja")]
+[node name="FlipperMainLeft" parent="." unique_id=1173830421 instance=ExtResource("12_78gja")]
 position = Vector2(478, 2424)
 scale = Vector2(1.3, 1.3)
 
-[node name="FlipperMainRight" parent="." instance=ExtResource("14_3tj61")]
+[node name="FlipperMainRight" parent="." unique_id=549745985 instance=ExtResource("14_3tj61")]
 position = Vector2(814, 2424)
 scale = Vector2(1.3, 1.3)
 
-[node name="FlipperUpperLeft" parent="." instance=ExtResource("12_78gja")]
+[node name="FlipperUpperLeft" parent="." unique_id=2065809876 instance=ExtResource("12_78gja")]
 position = Vector2(380, 1084)
 
-[node name="FlipperUpperRight" parent="." instance=ExtResource("14_3tj61")]
+[node name="FlipperUpperRight" parent="." unique_id=1566270602 instance=ExtResource("14_3tj61")]
 position = Vector2(900, 1084)
 
-[node name="Rollover0" type="Area2D" parent="." groups=["rollovers"]]
+[node name="Rollover0" type="Area2D" parent="." unique_id=1968767991 groups=["rollovers"]]
 position = Vector2(430, 250)
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Rollover0"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Rollover0" unique_id=2047450761]
 shape = SubResource("RectangleShape2D_oe7jm")
 
-[node name="Visual" type="Polygon2D" parent="Rollover0"]
+[node name="Visual" type="Polygon2D" parent="Rollover0" unique_id=1545474579]
 color = Color(0.3, 0.9, 0.5, 0.35)
 polygon = PackedVector2Array(-30, -30, 30, -30, 30, 30, -30, 30)
 
-[node name="Rollover1" type="Area2D" parent="." groups=["rollovers"]]
+[node name="Rollover1" type="Area2D" parent="." unique_id=486778093 groups=["rollovers"]]
 position = Vector2(640, 220)
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Rollover1"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Rollover1" unique_id=139982032]
 shape = SubResource("RectangleShape2D_hwpow")
 
-[node name="Visual" type="Polygon2D" parent="Rollover1"]
+[node name="Visual" type="Polygon2D" parent="Rollover1" unique_id=18243313]
 color = Color(0.3, 0.9, 0.5, 0.35)
 polygon = PackedVector2Array(-30, -30, 30, -30, 30, 30, -30, 30)
 
-[node name="Rollover2" type="Area2D" parent="." groups=["rollovers"]]
+[node name="Rollover2" type="Area2D" parent="." unique_id=370457075 groups=["rollovers"]]
 position = Vector2(850, 250)
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Rollover2"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Rollover2" unique_id=444294019]
 shape = SubResource("RectangleShape2D_bulov")
 
-[node name="Visual" type="Polygon2D" parent="Rollover2"]
+[node name="Visual" type="Polygon2D" parent="Rollover2" unique_id=644590507]
 color = Color(0.3, 0.9, 0.5, 0.35)
 polygon = PackedVector2Array(-30, -30, 30, -30, 30, 30, -30, 30)
 
-[node name="Drain" type="Area2D" parent="."]
+[node name="Drain" type="Area2D" parent="." unique_id=93136100]
 position = Vector2(640, 2520)
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Drain"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Drain" unique_id=1059264659]
 position = Vector2(0, 71)
 shape = SubResource("RectangleShape2D_0smtb")
 
-[node name="GravityZone" type="Area2D" parent="."]
+[node name="GravityZone" type="Area2D" parent="." unique_id=767540327]
 position = Vector2(640, 685)
 gravity_space_override = 3
 gravity = 1500.0
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="GravityZone"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="GravityZone" unique_id=1149770067]
 visible = false
 shape = SubResource("RectangleShape2D_dqafr")
 
-[node name="LaneGate" parent="." instance=ExtResource("15_gate")]
+[node name="LaneGate" parent="." unique_id=1992605775 instance=ExtResource("15_gate")]
 position = Vector2(1107, 1920)
 rotation = -0.12
 
-[node name="ExampleRail" parent="." instance=ExtResource("16_rail")]
-position = Vector2(338, 782)
+[node name="ExampleRail" parent="." unique_id=689590988 instance=ExtResource("16_rail")]
+position = Vector2(307.08792, 799)
 rotation = -1.5708
+scale = Vector2(1, 1.1728023)
 
-[node name="ExampleRamp" parent="." instance=ExtResource("17_ramp")]
+[node name="ExampleRamp" parent="." unique_id=588782854 instance=ExtResource("17_ramp")]
 position = Vector2(640, 899)
+
+[node name="Ambiance" type="CanvasLayer" parent="." unique_id=692629535]
+layer = 5
+
+[node name="Vignette" type="ColorRect" parent="Ambiance" unique_id=77046938]
+modulate = Color(1, 1, 1, 0.34117648)
+self_modulate = Color(1, 1, 1, 0.11372549)
+material = SubResource("shader_vignette")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.7285387, 0.7285387, 0.7285387, 0.90588236)

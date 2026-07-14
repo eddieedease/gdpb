@@ -102,6 +102,7 @@ func _physics_process(delta: float) -> void:
 	elif in_lane and _launch_charge > 0.0:
 		var sp := lerpf(launch_min_speed, launch_max_speed, _launch_charge)
 		ball.linear_velocity = launch_direction.normalized() * sp
+		SoundManager.play("launch", lerpf(0.9, 1.2, _launch_charge))
 		_launch_charge = 0.0
 
 
@@ -123,6 +124,7 @@ func _on_drain_body_entered(body: Node) -> void:
 	if not body.is_in_group("ball"):
 		return
 	body.queue_free()
+	SoundManager.play("drain")
 	GameManager.lose_ball()
 	if not GameManager.is_game_over:
 		await get_tree().create_timer(0.9).timeout
@@ -132,6 +134,7 @@ func _on_drain_body_entered(body: Node) -> void:
 func _on_rollover(body: Node, _area: Area2D) -> void:
 	if body.is_in_group("ball"):
 		GameManager.add_score(250)
+		SoundManager.play("target")
 
 
 func _on_drop_hit(_target) -> void:
@@ -139,6 +142,7 @@ func _on_drop_hit(_target) -> void:
 	if _drops_down >= _drops.size() and not _resetting_bank:
 		_resetting_bank = true
 		GameManager.add_score(5000)
+		SoundManager.play("target", 0.7)
 		await get_tree().create_timer(1.2).timeout
 		for d in _drops:
 			d.reset_target()

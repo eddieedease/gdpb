@@ -3,6 +3,8 @@ extends Node
 signal score_changed(score: int)
 signal balls_changed(balls: int)
 signal game_over
+## Fired on scoring hits so the camera and other feel systems can react.
+signal impact(strength: float)
 
 const STARTING_BALLS := 3
 

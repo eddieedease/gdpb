@@ -7,6 +7,9 @@ extends StaticBody2D
 ## Optional per-instance texture. Set on the instance root (survives editor
 ## re-saves, unlike child-node property overrides) to recolour a shared scene.
 @export var texture_override: Texture2D
+## "" auto-picks "target" (kick_speed == 0) or "bumper"; set explicitly for
+## variants like "slingshot" that share this script but want a different sfx.
+@export var sound_type := ""
 
 @onready var sprite: Sprite2D = get_node_or_null("Sprite2D")
 
@@ -30,7 +33,15 @@ func on_ball_hit(ball: RigidBody2D) -> void:
 			dir = Vector2.UP
 		ball.linear_velocity = dir * kick_speed
 	GameManager.add_score(points)
+	GameManager.impact.emit(clampf(kick_speed / 60.0, 4.0, 16.0))
+	SoundManager.play(_resolve_sound_type())
 	_flash()
+
+
+func _resolve_sound_type() -> String:
+	if sound_type != "":
+		return sound_type
+	return "target" if kick_speed <= 0.0 else "bumper"
 
 
 func _flash() -> void:

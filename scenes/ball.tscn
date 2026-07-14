@@ -1,7 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/ball.gd" id="1"]
 [ext_resource type="Texture2D" path="res://assets/sprites/Part__g1462.png" id="2"]
+[ext_resource type="Script" path="res://scripts/ball_trail.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/ball_audio.gd" id="4"]
+[ext_resource type="AudioStream" path="res://assets/sounds/sfx_roll.wav" id="5"]
 
 [sub_resource type="PhysicsMaterial" id="pm_ball"]
 friction = 0.15
@@ -18,9 +21,18 @@ contact_monitor = true
 max_contacts_reported = 6
 script = ExtResource("1")
 
+[node name="Trail" type="Line2D" parent="."]
+script = ExtResource("3")
+
 [node name="Sprite2D" type="Sprite2D" parent="."]
 scale = Vector2(0.224, 0.224)
 texture = ExtResource("2")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("shape_ball")
+
+[node name="RollSound" type="AudioStreamPlayer2D" parent="."]
+stream = ExtResource("5")
+volume_db = -80.0
+max_distance = 2000.0
+script = ExtResource("4")

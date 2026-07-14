@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=3 uid="uid://bb422je03c41i"]
+[gd_scene load_steps=25 format=3 uid="uid://bb422je03c41i"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1"]
 [ext_resource type="Texture2D" uid="uid://vb8ct7jbp516" path="res://assets/background/bg.jpg" id="2"]
@@ -17,6 +17,10 @@
 [ext_resource type="Texture2D" uid="uid://bhegr1jo4e81s" path="res://assets/sprites/Part__g1456.png" id="15"]
 [ext_resource type="Texture2D" uid="uid://d1fnslboqpkua" path="res://assets/sprites/Part__g1444.png" id="16"]
 [ext_resource type="Texture2D" uid="uid://c7rxc15hleuo" path="res://assets/sprites/Part__g1447.png" id="17"]
+[ext_resource type="Shader" path="res://shaders/vignette.gdshader" id="18"]
+
+[sub_resource type="ShaderMaterial" id="shader_vignette"]
+shader = ExtResource("18")
 
 [sub_resource type="PhysicsMaterial" id="pm_walls"]
 friction = 0.2
@@ -180,5 +184,16 @@ theme_override_constants/outline_size = 14
 theme_override_font_sizes/font_size = 56
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="Ambiance" type="CanvasLayer" parent="."]
+layer = 5
+
+[node name="Vignette" type="ColorRect" parent="Ambiance"]
+material = SubResource("shader_vignette")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(1, 1, 1, 1)
 
 [connection signal="body_entered" from="DrainArea" to="." method="_on_drain_body_entered"]

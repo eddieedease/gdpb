@@ -25,6 +25,7 @@ func _physics_process(delta: float) -> void:
 		if ball != null:
 			var speed := min_speed + _charge * (max_speed - min_speed)
 			ball.linear_velocity = Vector2(0.0, -speed)
+			SoundManager.play("launch", lerpf(0.9, 1.2, _charge))
 		_charging = false
 		_charge = 0.0
 

@@ -10,6 +10,7 @@ var _shake := 0.0
 
 func _ready() -> void:
 	zoom = Vector2(zoom_level, zoom_level)
+	GameManager.impact.connect(shake)
 
 
 ## Kick the camera - used by nudges for feel.

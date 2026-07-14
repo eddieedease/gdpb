@@ -39,6 +39,7 @@ func _on_drain_body_entered(body: Node) -> void:
 	if not body.is_in_group("ball"):
 		return
 	body.queue_free()
+	SoundManager.play("drain")
 	GameManager.lose_ball()
 	if not GameManager.is_game_over:
 		await get_tree().create_timer(1.0).timeout

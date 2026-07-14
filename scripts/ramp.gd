@@ -153,6 +153,7 @@ func _on_field_entered(body: Node) -> void:
 	body.collision_mask = RAMP_BIT
 	body.z_index = 10
 	body.set_meta("on_ramp", true)
+	SoundManager.play("whoosh")
 	if ramp_score > 0:
 		GameManager.add_score(ramp_score)
 

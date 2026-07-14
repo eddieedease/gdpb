@@ -43,6 +43,8 @@ func on_ball_hit(_ball: RigidBody2D) -> void:
 	if _visual:
 		_visual.visible = false
 	GameManager.add_score(points)
+	GameManager.impact.emit(6.0)
+	SoundManager.play("target")
 	hit.emit(self)
 
 
