@@ -29,7 +29,7 @@ const TABLE_SIZE := Vector2(1280, 2560)
 @export var top_height := 0.21
 ## Drop shadows: each tier is drawn a second time on the table surface,
 ## darkened and offset, which anchors the raised pieces visually.
-@export var shadow_offset := Vector2(0.2, 0.16)
+@export var shadow_offset := Vector2(0.07, 0.055)
 @export var shadow_opacity := 0.45
 
 ## Camera height above the table plane.

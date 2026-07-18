@@ -36,6 +36,20 @@ size = Vector2(1280, 80)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_dqafr"]
 size = Vector2(1280, 2560)
 
+[sub_resource type="Curve2D" id="Curve2D_gep3k"]
+resource_local_to_scene = true
+_data = {
+"points": PackedVector2Array(0, 0, 60, -70, -140, 40, -60, 0, 60, 0, 0, -60, -60, 70, 0, 0, 247.51465, -152.81989)
+}
+point_count = 3
+
+[sub_resource type="Curve2D" id="Curve2D_2gl5b"]
+resource_local_to_scene = true
+_data = {
+"points": PackedVector2Array(0, 0, 40, -120, -160, 60, -80, 0, 80, 0, 0, -120, -40, -120, 0, 0, 160, 60)
+}
+point_count = 3
+
 [sub_resource type="ShaderMaterial" id="shader_vignette"]
 shader = ExtResource("18_vignette")
 shader_parameter/strength = 0.4
@@ -43,6 +57,13 @@ shader_parameter/radius = 1.05
 shader_parameter/softness = 0.55
 shader_parameter/tint = Color(0.05, 0.03, 0.1, 1)
 shader_parameter/glow_strength = 0.05
+
+[sub_resource type="Curve2D" id="Curve2D_upohv"]
+resource_local_to_scene = true
+_data = {
+"points": PackedVector2Array(0, 0, 40, -120, -160, 60, -80, 0, 80, 0, 0, -120, -40, -120, 0, 0, 160, 60)
+}
+point_count = 3
 
 [node name="AdvancedTable" type="Node2D" unique_id=1528581958]
 script = ExtResource("1_00vba")
@@ -215,16 +236,14 @@ position = Vector2(1107, 1920)
 rotation = -0.12
 
 [node name="ExampleRail" parent="." unique_id=689590988 instance=ExtResource("16_rail")]
-position = Vector2(862.00006, 1113)
+position = Vector2(833.00006, 852)
 rotation = -1.0062875
 scale = Vector2(1, 1.1728023)
+curve = SubResource("Curve2D_gep3k")
 
 [node name="ExampleRamp" parent="." unique_id=588782854 instance=ExtResource("17_ramp")]
 position = Vector2(640, 461)
-guide_strength = null
-centering = null
-channel_gravity = null
-whoosh_min_speed = null
+curve = SubResource("Curve2D_2gl5b")
 
 [node name="Ambiance" type="CanvasLayer" parent="." unique_id=692629535]
 layer = 5
@@ -243,10 +262,7 @@ color = Color(0.7285387, 0.7285387, 0.7285387, 0.90588236)
 [node name="ExampleRamp2" parent="." unique_id=100044486 instance=ExtResource("17_ramp")]
 position = Vector2(323, 1501.0001)
 rotation = -1.2140095
-guide_strength = null
-centering = null
-channel_gravity = null
-whoosh_min_speed = null
+curve = SubResource("Curve2D_upohv")
 
 [node name="DropTarget3" type="StaticBody2D" parent="." unique_id=153143360 groups=["drop_targets"]]
 position = Vector2(336, 1057)

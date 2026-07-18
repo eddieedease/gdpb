@@ -46,6 +46,7 @@ func _ready() -> void:
 		_build_wall($Left.points)
 		_build_wall($Right.points)
 		_build_field()
+		_build_mouths()
 
 
 func _connect_curve() -> void:
@@ -148,9 +149,11 @@ func _build_field() -> void:
 		poly.append(right[i])
 	var area := Area2D.new()
 	area.name = "Field"
-	area.collision_mask = 1 | RAMP_BIT   # detect the ball whether on or off the ramp
+	# Only balls already RIDING the channel (RAMP_BIT): a playfield ball
+	# crossing under the channel is neither captured nor affected by it.
+	area.collision_mask = RAMP_BIT
 	# Reduced gravity inside the channel (wins over the table's gravity zone)
-	# so the ball keeps its momentum through climbs.
+	# so the riding ball keeps its momentum through climbs.
 	area.gravity_space_override = Area2D.SPACE_OVERRIDE_REPLACE
 	area.gravity = channel_gravity
 	area.gravity_direction = Vector2.DOWN
@@ -159,12 +162,43 @@ func _build_field() -> void:
 	cp.polygon = poly
 	area.add_child(cp)
 	add_child(area)
-	area.body_entered.connect(_on_field_entered)
 	area.body_exited.connect(_on_field_exited)
 
 
-func _on_field_entered(body: Node) -> void:
+## Capture zones at the two curve ends. Only a playfield ball moving INTO the
+## channel boards it - so balls crossing the middle pass underneath, and a
+## ball just released at the exit is not immediately recaptured.
+func _build_mouths() -> void:
+	var center := curve.tessellate(5, smoothness)
+	if center.size() < 2:
+		return
+	_make_mouth(center[0], center[1])
+	_make_mouth(center[center.size() - 1], center[center.size() - 2])
+
+
+func _make_mouth(at: Vector2, toward: Vector2) -> void:
+	var area := Area2D.new()
+	area.position = at
+	area.collision_mask = 1   # playfield balls only
+	var cs := CollisionShape2D.new()
+	var circ := CircleShape2D.new()
+	circ.radius = channel_width * 0.7
+	cs.shape = circ
+	area.add_child(cs)
+	add_child(area)
+	# Inward direction in global space (pieces don't move at runtime).
+	var inward: Vector2 = (to_global(toward) - to_global(at)).normalized()
+	area.body_entered.connect(_on_mouth_entered.bind(inward))
+
+
+func _on_mouth_entered(body: Node, inward: Vector2) -> void:
 	if not body.is_in_group("ball") or body.get_meta("on_ramp", false):
+		return
+	if not body is RigidBody2D:
+		return
+	# Must be moving into the channel - a ball rolling past or just released
+	# at the exit is ignored.
+	if body.linear_velocity.dot(inward) < 60.0:
 		return
 	# board the ramp -> ride over the playfield (but keep colliding with the
 	# ramp walls so it stays guided)
@@ -172,11 +206,9 @@ func _on_field_entered(body: Node) -> void:
 	body.collision_mask = RAMP_BIT
 	body.z_index = 10
 	body.set_meta("on_ramp", true)
-	var speed := 0.0
-	if body is RigidBody2D:
-		speed = body.linear_velocity.length()
-		if not _riding.has(body):
-			_riding.append(body)
+	var speed: float = body.linear_velocity.length()
+	if not _riding.has(body):
+		_riding.append(body)
 	# Whoosh only on a committed shot (fast enough to carry through), with a
 	# short cooldown so hovering around the mouth can't re-trigger it.
 	var now := Time.get_ticks_msec()
@@ -188,7 +220,13 @@ func _on_field_entered(body: Node) -> void:
 
 
 func _on_field_exited(body: Node) -> void:
-	if not body.is_in_group("ball") or not body.get_meta("on_ramp", false):
+	if not body.is_in_group("ball"):
+		return
+	_release(body)
+
+
+func _release(body: Node) -> void:
+	if not body.get_meta("on_ramp", false):
 		return
 	body.collision_layer = 1
 	body.collision_mask = 1
@@ -210,6 +248,11 @@ func _physics_process(delta: float) -> void:
 		# Direction of the channel at the ball's position (in global space).
 		var local := to_local(ball.global_position)
 		var off := curve.get_closest_offset(local)
+		# Safety: a riding ball that somehow strays far from the channel is
+		# released back to normal play instead of staying stuck "in" the ramp.
+		if local.distance_to(curve.sample_baked(off)) > channel_width * 1.6:
+			_release(ball)
+			continue
 		var ahead := curve.sample_baked(minf(off + 8.0, curve.get_baked_length()))
 		var behind := curve.sample_baked(maxf(off - 8.0, 0.0))
 		var tangent := (to_global(ahead) - to_global(behind)).normalized()
