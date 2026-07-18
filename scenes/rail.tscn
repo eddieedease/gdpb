@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/rail.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/ramp.gd" id="1"]
 
 [sub_resource type="Curve2D" id="Curve2D_1"]
 _data = {
@@ -11,6 +11,7 @@ point_count = 3
 [node name="Rail" type="Path2D"]
 curve = SubResource("Curve2D_1")
 script = ExtResource("1")
+ramp_score = 500
 
 [node name="Left" type="Line2D" parent="."]
 width = 7.0

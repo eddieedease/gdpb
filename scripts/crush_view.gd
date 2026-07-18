@@ -81,10 +81,10 @@ func _ready() -> void:
 	var space: RID = _vp.find_world_2d().space
 	for child in table.get_children().duplicate():
 		var n: String = child.name
-		if n.contains("Ramp"):
-			# Ramps are drawn as sloped 3D rails (board level at the mouths,
-			# rising to top_height) instead of on a flat tier plane. Physics
-			# stays 2D and untouched; only the flat art is replaced.
+		if n.contains("Ramp") or n.contains("Rail"):
+			# Ramps AND rails are elevated channels drawn as sloped 3D rails
+			# (board level at the mouths, rising to top_height). Physics stays
+			# 2D and untouched; only the flat art is replaced.
 			child.reparent(_vp_top)
 			_rehome_physics(child, space)
 			_build_ramp_rails(child)
@@ -146,7 +146,7 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 		mesh.mesh = st.commit()
 		var mat := StandardMaterial3D.new()
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.albedo_color = Color(1.0, 0.75, 0.3)
+		mat.albedo_color = line.default_color   # ramps orange, rails blue
 		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 		mesh.material_override = mat
 		add_child(mesh)

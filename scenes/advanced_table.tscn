@@ -238,7 +238,3 @@ color = Color(0.7285387, 0.7285387, 0.7285387, 0.90588236)
 [node name="ExampleRamp2" parent="." unique_id=100044486 instance=ExtResource("17_ramp")]
 position = Vector2(323, 1501.0001)
 rotation = -1.2140095
-
-[node name="ExampleRamp2" parent="ExampleRamp2" unique_id=864676548 instance=ExtResource("17_ramp")]
-position = Vector2(-376.26392, 341.9506)
-rotation = 1.525095

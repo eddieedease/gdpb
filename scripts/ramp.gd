@@ -22,6 +22,15 @@ const RAMP_BIT := 1 << 3  # physics layer 4, reserved for ramps
 ## Points awarded once each time a ball boards the ramp (0 = no scoring).
 @export var ramp_score := 2000
 
+## The "sucked in" feel: while captured, the ball is steered along the curve
+## (speed preserved), pulled gently to the centreline, and gravity inside the
+## channel is reduced so momentum carries it through climbs.
+@export var guide_strength := 6.0
+@export var centering := 8.0
+@export var channel_gravity := 250.0
+
+var _riding: Array[RigidBody2D] = []
+
 @onready var _left: Line2D = $Left
 @onready var _right: Line2D = $Right
 
@@ -136,6 +145,12 @@ func _build_field() -> void:
 	var area := Area2D.new()
 	area.name = "Field"
 	area.collision_mask = 1 | RAMP_BIT   # detect the ball whether on or off the ramp
+	# Reduced gravity inside the channel (wins over the table's gravity zone)
+	# so the ball keeps its momentum through climbs.
+	area.gravity_space_override = Area2D.SPACE_OVERRIDE_REPLACE
+	area.gravity = channel_gravity
+	area.gravity_direction = Vector2.DOWN
+	area.priority = 5
 	var cp := CollisionPolygon2D.new()
 	cp.polygon = poly
 	area.add_child(cp)
@@ -153,6 +168,8 @@ func _on_field_entered(body: Node) -> void:
 	body.collision_mask = RAMP_BIT
 	body.z_index = 10
 	body.set_meta("on_ramp", true)
+	if body is RigidBody2D and not _riding.has(body):
+		_riding.append(body)
 	SoundManager.play("whoosh")
 	if ramp_score > 0:
 		GameManager.add_score(ramp_score)
@@ -165,3 +182,33 @@ func _on_field_exited(body: Node) -> void:
 	body.collision_mask = 1
 	body.z_index = 0
 	body.set_meta("on_ramp", false)
+	_riding.erase(body)
+
+
+func _physics_process(delta: float) -> void:
+	if Engine.is_editor_hint() or _riding.is_empty() or curve == null:
+		return
+	for ball: RigidBody2D in _riding.duplicate():
+		if not is_instance_valid(ball):
+			_riding.erase(ball)
+			continue
+		var speed: float = ball.linear_velocity.length()
+		if speed < 80.0:
+			continue
+		# Direction of the channel at the ball's position (in global space).
+		var local := to_local(ball.global_position)
+		var off := curve.get_closest_offset(local)
+		var ahead := curve.sample_baked(minf(off + 8.0, curve.get_baked_length()))
+		var behind := curve.sample_baked(maxf(off - 8.0, 0.0))
+		var tangent := (to_global(ahead) - to_global(behind)).normalized()
+		if tangent.length_squared() < 0.5:
+			continue
+		# Steer along the channel, whichever way the ball is already moving,
+		# preserving its speed - the "locked in, keeps momentum" feel.
+		if ball.linear_velocity.dot(tangent) < 0.0:
+			tangent = -tangent
+		var target := tangent * speed
+		ball.linear_velocity = ball.linear_velocity.lerp(target, clampf(guide_strength * delta, 0.0, 1.0))
+		# Gentle pull toward the centreline.
+		var to_center: Vector2 = to_global(curve.sample_baked(off)) - ball.global_position
+		ball.linear_velocity += to_center * centering * delta
