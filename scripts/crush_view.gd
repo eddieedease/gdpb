@@ -132,16 +132,34 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 			continue
 		var pts := line.points
 		var n := pts.size()
+		# Thin wire-like ribbon (a deep band reads as a fence standing on the
+		# board; a shallow one reads as an elevated rail).
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+		# Matching shadow strip painted on the board, fading IN as the rail
+		# rises - so the rail is visually attached only at its mouths and
+		# clearly floats with air underneath everywhere else.
+		var sh := SurfaceTool.new()
+		sh.begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
 		for i in n:
 			var t := float(i) / float(n - 1)
 			# smoothstep rise over the first/last 30% of the curve
 			var k := clampf(minf(t, 1.0 - t) / 0.3, 0.0, 1.0)
 			var h := top_height * k * k * (3.0 - 2.0 * k)
 			var w := _table_to_world(line.to_global(pts[i]))
-			st.add_vertex(Vector3(w.x, h + 0.03, w.z))
-			st.add_vertex(Vector3(w.x, h - 0.09, w.z))
+			st.add_vertex(Vector3(w.x, h + 0.02, w.z))
+			st.add_vertex(Vector3(w.x, h - 0.035, w.z))
+			# horizontal direction of the rail at this point, for shadow width
+			var p_prev := pts[maxi(i - 1, 0)]
+			var p_next := pts[mini(i + 1, n - 1)]
+			var tang := (p_next - p_prev).normalized()
+			var perp := Vector3(-tang.y, 0.0, tang.x) * 0.04
+			var a := clampf(h / maxf(top_height, 0.001), 0.0, 1.0) * 0.4
+			var s := Vector3(w.x + 0.05, 0.012, w.z + 0.04)   # slight light offset
+			sh.set_color(Color(0, 0, 0, a))
+			sh.add_vertex(s + perp)
+			sh.set_color(Color(0, 0, 0, a))
+			sh.add_vertex(s - perp)
 		var mesh := MeshInstance3D.new()
 		mesh.mesh = st.commit()
 		var mat := StandardMaterial3D.new()
@@ -150,6 +168,15 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 		mesh.material_override = mat
 		add_child(mesh)
+		var smesh := MeshInstance3D.new()
+		smesh.mesh = sh.commit()
+		var smat := StandardMaterial3D.new()
+		smat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		smat.vertex_color_use_as_albedo = true
+		smat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		smat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		smesh.material_override = smat
+		add_child(smesh)
 		line.visible = false
 
 
