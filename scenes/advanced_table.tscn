@@ -214,12 +214,15 @@ position = Vector2(1107, 1920)
 rotation = -0.12
 
 [node name="ExampleRail" parent="." unique_id=689590988 instance=ExtResource("16_rail")]
-position = Vector2(274, 436)
+position = Vector2(776, 1032)
 rotation = -1.0062875
 scale = Vector2(1, 1.1728023)
 
 [node name="ExampleRamp" parent="." unique_id=588782854 instance=ExtResource("17_ramp")]
 position = Vector2(640, 461)
+guide_strength = null
+centering = null
+channel_gravity = null
 
 [node name="Ambiance" type="CanvasLayer" parent="." unique_id=692629535]
 layer = 5
@@ -238,3 +241,28 @@ color = Color(0.7285387, 0.7285387, 0.7285387, 0.90588236)
 [node name="ExampleRamp2" parent="." unique_id=100044486 instance=ExtResource("17_ramp")]
 position = Vector2(323, 1501.0001)
 rotation = -1.2140095
+guide_strength = null
+centering = null
+channel_gravity = null
+
+[node name="DropTarget3" type="StaticBody2D" parent="." unique_id=153143360 groups=["drop_targets"]]
+position = Vector2(336, 1057)
+script = ExtResource("11_doqff")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="DropTarget3" unique_id=1274793575]
+shape = SubResource("RectangleShape2D_a0uye")
+
+[node name="Visual" type="Polygon2D" parent="DropTarget3" unique_id=1094227911]
+color = Color(1, 0.55, 0.25, 1)
+polygon = PackedVector2Array(-32, -17, 32, -17, 32, 17, -32, 17)
+
+[node name="DropTarget4" type="StaticBody2D" parent="." unique_id=1248700213 groups=["drop_targets"]]
+position = Vector2(469, 1060)
+script = ExtResource("11_doqff")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="DropTarget4" unique_id=275924975]
+shape = SubResource("RectangleShape2D_k4m7e")
+
+[node name="Visual" type="Polygon2D" parent="DropTarget4" unique_id=530531634]
+color = Color(1, 0.55, 0.25, 1)
+polygon = PackedVector2Array(-32, -17, 32, -17, 32, 17, -32, 17)

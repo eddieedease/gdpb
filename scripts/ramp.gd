@@ -28,8 +28,12 @@ const RAMP_BIT := 1 << 3  # physics layer 4, reserved for ramps
 @export var guide_strength := 6.0
 @export var centering := 8.0
 @export var channel_gravity := 250.0
+## Minimum capture speed for the whoosh sound - a slow dribble that rolls
+## back out of the mouth stays silent.
+@export var whoosh_min_speed := 800.0
 
 var _riding: Array[RigidBody2D] = []
+var _last_whoosh_ms := 0
 
 @onready var _left: Line2D = $Left
 @onready var _right: Line2D = $Right
@@ -168,9 +172,17 @@ func _on_field_entered(body: Node) -> void:
 	body.collision_mask = RAMP_BIT
 	body.z_index = 10
 	body.set_meta("on_ramp", true)
-	if body is RigidBody2D and not _riding.has(body):
-		_riding.append(body)
-	SoundManager.play("whoosh")
+	var speed := 0.0
+	if body is RigidBody2D:
+		speed = body.linear_velocity.length()
+		if not _riding.has(body):
+			_riding.append(body)
+	# Whoosh only on a committed shot (fast enough to carry through), with a
+	# short cooldown so hovering around the mouth can't re-trigger it.
+	var now := Time.get_ticks_msec()
+	if speed >= whoosh_min_speed and now - _last_whoosh_ms > 450:
+		_last_whoosh_ms = now
+		SoundManager.play("whoosh", lerpf(0.95, 1.2, clampf((speed - whoosh_min_speed) / 1600.0, 0.0, 1.0)))
 	if ramp_score > 0:
 		GameManager.add_score(ramp_score)
 
