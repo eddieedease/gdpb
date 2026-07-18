@@ -83,7 +83,7 @@ position = Vector2(0, 126)
 points = PackedVector2Array(250, 1440, 374, 1420)
 
 [node name="LedgeRight" parent="." unique_id=883286112 instance=ExtResource("5_6qs8c")]
-position = Vector2(4, -431)
+position = Vector2(-14, -240)
 points = PackedVector2Array(1030, 1440, 960.57117, 1457.3572, 910, 1470)
 
 [node name="Bumper0" parent="." unique_id=941541461 instance=ExtResource("7_t1bve")]
@@ -112,7 +112,8 @@ position = Vector2(640, 1241)
 
 [node name="Bumper7" parent="." unique_id=1159808320 instance=ExtResource("7_t1bve")]
 modulate = Color(0.8, 1, 0.85, 1)
-position = Vector2(312, 1492)
+position = Vector2(216, 528.9999)
+rotation = 0.10427204
 
 [node name="Bumper8" parent="." unique_id=529326980 instance=ExtResource("7_t1bve")]
 modulate = Color(0.7, 0.85, 1, 1)
@@ -214,7 +215,7 @@ position = Vector2(1107, 1920)
 rotation = -0.12
 
 [node name="ExampleRail" parent="." unique_id=689590988 instance=ExtResource("16_rail")]
-position = Vector2(776, 1032)
+position = Vector2(862.00006, 1113)
 rotation = -1.0062875
 scale = Vector2(1, 1.1728023)
 
@@ -223,6 +224,7 @@ position = Vector2(640, 461)
 guide_strength = null
 centering = null
 channel_gravity = null
+whoosh_min_speed = null
 
 [node name="Ambiance" type="CanvasLayer" parent="." unique_id=692629535]
 layer = 5
@@ -244,6 +246,7 @@ rotation = -1.2140095
 guide_strength = null
 centering = null
 channel_gravity = null
+whoosh_min_speed = null
 
 [node name="DropTarget3" type="StaticBody2D" parent="." unique_id=153143360 groups=["drop_targets"]]
 position = Vector2(336, 1057)

@@ -3,6 +3,7 @@
 [ext_resource type="Script" path="res://scripts/ramp.gd" id="1"]
 
 [sub_resource type="Curve2D" id="Curve2D_1"]
+resource_local_to_scene = true
 _data = {
 "points": PackedVector2Array(0, 0, 40, -120, -160, 60, -80, 0, 80, 0, 0, -120, -40, -120, 0, 0, 160, 60)
 }
