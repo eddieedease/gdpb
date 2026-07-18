@@ -3,8 +3,7 @@ extends Control
 ## maintain. Each table scene sets its own display/view on load.
 
 const TABLES := [
-	{"name": "CLASSIC TABLE", "desc": "The original portrait table", "scene": "res://scenes/main.tscn"},
-	{"name": "CRUSH TABLE", "desc": "Wide, multi-level - stacked flippers", "scene": "res://scenes/advanced_table.tscn"},
+	{"name": "CRUSH TABLE", "desc": "Wide, multi-level - stacked flippers", "scene": "res://scenes/crush_view.tscn"},
 ]
 
 
