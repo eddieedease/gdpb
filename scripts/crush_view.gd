@@ -25,8 +25,8 @@ const TABLE_SIZE := Vector2(1280, 2560)
 # the ball meets a bumper's skirt at floor level while the body towers above.
 
 ## Height of the mid / top tiers above the playfield, in metres.
-@export var mid_height := 0.22
-@export var top_height := 0.42
+@export var mid_height := 0.11
+@export var top_height := 0.21
 ## Drop shadows: each tier is drawn a second time on the table surface,
 ## darkened and offset, which anchors the raised pieces visually.
 @export var shadow_offset := Vector2(0.2, 0.16)
@@ -81,7 +81,14 @@ func _ready() -> void:
 	var space: RID = _vp.find_world_2d().space
 	for child in table.get_children().duplicate():
 		var n: String = child.name
-		if n.begins_with("Bumper") or n.begins_with("DropTarget") or n.contains("Ramp"):
+		if n.contains("Ramp"):
+			# Ramps are drawn as sloped 3D rails (board level at the mouths,
+			# rising to top_height) instead of on a flat tier plane. Physics
+			# stays 2D and untouched; only the flat art is replaced.
+			child.reparent(_vp_top)
+			_rehome_physics(child, space)
+			_build_ramp_rails(child)
+		elif n.begins_with("Bumper") or n.begins_with("DropTarget"):
 			child.reparent(_vp_top)
 			_rehome_physics(child, space)
 		elif n.begins_with("Flipper") or n.begins_with("Slingshot") or n == "LaneGate":
@@ -108,6 +115,42 @@ func _make_tier_viewport() -> SubViewport:
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	add_child(vp)
 	return vp
+
+
+## Replace a ramp's flat 2D rail art with 3D ribbons that rise from board
+## level at each mouth to top_height along the middle - the visual "pass"
+## between levels. Built from the ramp's own Left/Right polylines.
+func _build_ramp_rails(ramp: Node2D) -> void:
+	# Handle ramps nested inside other ramps too (easy to create by accident
+	# when instancing in the editor).
+	for c in ramp.get_children():
+		if c is Node2D and c.get_node_or_null("Left") != null:
+			_build_ramp_rails(c)
+	for rail_name in ["Left", "Right"]:
+		var line: Line2D = ramp.get_node_or_null(rail_name)
+		if line == null or line.points.size() < 2:
+			continue
+		var pts := line.points
+		var n := pts.size()
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+		for i in n:
+			var t := float(i) / float(n - 1)
+			# smoothstep rise over the first/last 30% of the curve
+			var k := clampf(minf(t, 1.0 - t) / 0.3, 0.0, 1.0)
+			var h := top_height * k * k * (3.0 - 2.0 * k)
+			var w := _table_to_world(line.to_global(pts[i]))
+			st.add_vertex(Vector3(w.x, h + 0.03, w.z))
+			st.add_vertex(Vector3(w.x, h - 0.09, w.z))
+		var mesh := MeshInstance3D.new()
+		mesh.mesh = st.commit()
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.albedo_color = Color(1.0, 0.75, 0.3)
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mesh.material_override = mat
+		add_child(mesh)
+		line.visible = false
 
 
 ## Move every physics body/area under `node` into the table's physics space so
