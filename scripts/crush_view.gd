@@ -1,13 +1,32 @@
 extends Node3D
 ## 2.5D presentation for the Crush table. The 2D table runs unchanged inside a
-## SubViewport; its texture is projected onto a plane lying flat in 3D space,
-## and a perspective Camera3D follows the ball down the table at a slant -
-## like standing at a real machine. ALL gameplay stays 2D.
+## SubViewport and is projected into 3D, where a perspective Camera3D follows
+## the ball at a slant. ALL gameplay stays 2D.
 ##
-## Tune the view with the camera_* exports below.
+## Elevation/parallax: playfield pieces are split over three render tiers
+## (base surface / mid / top) using CanvasItem.visibility_layer bits. Two extra
+## SubViewports share the SAME 2D world but cull to one tier each, and each
+## tier is projected onto its own transparent plane at increasing height above
+## the table. With the perspective camera this produces true parallax - you
+## can see around raised pieces. The ball hops to the top tier while riding a
+## ramp, so ramps visibly elevate it.
+##
+## A simple 3D arcade cabinet (body, rails, legs, glowing backbox) sits under
+## the projected playfield.
 
 const PX_PER_M := 100.0          # 2D pixels -> 3D metres
 const TABLE_SIZE := Vector2(1280, 2560)
+
+# Elevation tiers. Mid/top pieces are MOVED into their own SubViewports, which
+# render them on separate transparent planes (a viewport reliably renders only
+# its own children). Their physics bodies/areas are then re-homed into the
+# table's physics space at the PhysicsServer level, so gameplay stays one
+# unified world. The ball stays on the base plane - correct for pinball, where
+# the ball meets a bumper's skirt at floor level while the body towers above.
+
+## Height of the mid / top tiers above the playfield, in metres.
+@export var mid_height := 0.14
+@export var top_height := 0.3
 
 ## Camera height above the table plane.
 @export var camera_height := 8.2
@@ -23,6 +42,8 @@ const TABLE_SIZE := Vector2(1280, 2560)
 @onready var _vp: SubViewport = $GameViewport
 @onready var _cam: Camera3D = $Camera3D
 
+var _vp_mid: SubViewport
+var _vp_top: SubViewport
 var _last_ball := Vector2(1120, 2360)   # start aimed at the plunger
 var _punch := 0.0
 
@@ -33,21 +54,12 @@ func _ready() -> void:
 	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP_WIDTH
 	win.content_scale_size = Vector2i(1280, 720)
 
-	# Table surface colour (drawn behind the table inside the viewport) so the
-	# playfield reads as a distinct slab against the darker 3D void.
+	# Table surface colour (drawn behind the table inside the viewport).
 	var surface := ColorRect.new()
 	surface.color = Color(0.16, 0.17, 0.22)
 	surface.size = TABLE_SIZE
 	_vp.add_child(surface)
 	_vp.move_child(surface, 0)
-
-	# Dark world backdrop behind/around the table.
-	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.03, 0.03, 0.06)
-	var we := WorldEnvironment.new()
-	we.environment = env
-	add_child(we)
 
 	# The 3D camera replaces the table's own 2D camera and HUD (the HUD lives
 	# in this scene instead, drawn flat on the real screen).
@@ -59,21 +71,134 @@ func _ready() -> void:
 	if table_hud:
 		table_hud.queue_free()
 
-	# Screen: a quad lying flat, showing the live table texture.
+	# --- elevation tiers ---
+	_vp_mid = _make_tier_viewport()
+	_vp_top = _make_tier_viewport()
+	var space: RID = _vp.find_world_2d().space
+	for child in table.get_children().duplicate():
+		var n: String = child.name
+		if n.begins_with("Bumper") or n.begins_with("DropTarget") or n.contains("Ramp"):
+			child.reparent(_vp_top)
+			_rehome_physics(child, space)
+		elif n.begins_with("Flipper") or n.begins_with("Slingshot") or n == "LaneGate":
+			child.reparent(_vp_mid)
+			_rehome_physics(child, space)
+	_add_screen(_vp.get_texture(), 0.0, false)
+	_add_screen(_vp_mid.get_texture(), mid_height, true)
+	_add_screen(_vp_top.get_texture(), top_height, true)
+
+	_build_environment()
+	_build_cabinet()
+
+	_cam.fov = camera_fov
+	_cam.position = _table_to_world(_last_ball) + Vector3(0, camera_height, camera_back)
+	GameManager.impact.connect(_on_impact)
+
+
+func _make_tier_viewport() -> SubViewport:
+	var vp := SubViewport.new()
+	vp.size = _vp.size
+	vp.transparent_bg = true
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(vp)
+	return vp
+
+
+## Move every physics body/area under `node` into the table's physics space so
+## pieces rendered in a tier viewport still collide with the ball.
+func _rehome_physics(node: Node, space: RID) -> void:
+	if node is Area2D:
+		PhysicsServer2D.area_set_space(node.get_rid(), space)
+	elif node is CollisionObject2D:
+		PhysicsServer2D.body_set_space(node.get_rid(), space)
+	for c in node.get_children():
+		_rehome_physics(c, space)
+
+
+func _add_screen(tex: Texture2D, height: float, transparent: bool) -> void:
 	var mesh := MeshInstance3D.new()
 	var quad := QuadMesh.new()
 	quad.size = TABLE_SIZE / PX_PER_M
 	mesh.mesh = quad
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_texture = _vp.get_texture()
+	mat.albedo_texture = tex
+	if transparent:
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mesh.material_override = mat
 	mesh.rotation_degrees.x = -90.0
+	mesh.position.y = height
 	add_child(mesh)
 
-	_cam.fov = camera_fov
-	_cam.position = _table_to_world(_last_ball) + Vector3(0, camera_height, camera_back)
-	GameManager.impact.connect(_on_impact)
+
+func _build_environment() -> void:
+	var sky_mat := ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color(0.01, 0.01, 0.04)
+	sky_mat.sky_horizon_color = Color(0.05, 0.04, 0.11)
+	sky_mat.ground_bottom_color = Color(0.01, 0.01, 0.02)
+	sky_mat.ground_horizon_color = Color(0.05, 0.04, 0.11)
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
+	var env := Environment.new()
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.5, 0.55, 0.7)
+	env.ambient_light_energy = 0.6
+	var we := WorldEnvironment.new()
+	we.environment = env
+	add_child(we)
+
+	var light := DirectionalLight3D.new()
+	light.rotation_degrees = Vector3(-52, 28, 0)
+	light.light_energy = 1.1
+	light.shadow_enabled = true
+	add_child(light)
+
+
+func _build_cabinet() -> void:
+	var w := TABLE_SIZE.x / PX_PER_M      # 12.8
+	var l := TABLE_SIZE.y / PX_PER_M      # 25.6
+	var body_col := Color(0.09, 0.10, 0.15)
+	var rail_col := Color(0.14, 0.15, 0.22)
+	var neon := Color(0.3, 0.85, 1.0)
+
+	# main body slab under the playfield
+	_box(Vector3(w + 1.0, 1.0, l + 1.0), Vector3(0, -0.52, 0), body_col)
+	# side rails + end caps (slightly proud of the playfield)
+	_box(Vector3(0.35, 0.6, l + 1.0), Vector3(-(w * 0.5 + 0.32), -0.05, 0), rail_col)
+	_box(Vector3(0.35, 0.6, l + 1.0), Vector3(w * 0.5 + 0.32, -0.05, 0), rail_col)
+	_box(Vector3(w + 1.0, 0.6, 0.35), Vector3(0, -0.05, l * 0.5 + 0.32), rail_col)
+	_box(Vector3(w + 1.0, 0.6, 0.35), Vector3(0, -0.05, -(l * 0.5 + 0.32)), rail_col)
+	# neon accent strips along the rail tops
+	_box(Vector3(0.08, 0.06, l + 1.0), Vector3(-(w * 0.5 + 0.32), 0.28, 0), neon, 1.6)
+	_box(Vector3(0.08, 0.06, l + 1.0), Vector3(w * 0.5 + 0.32, 0.28, 0), neon, 1.6)
+	# legs
+	for corner in [Vector3(-w * 0.5 - 0.2, -2.2, l * 0.5 + 0.2), Vector3(w * 0.5 + 0.2, -2.2, l * 0.5 + 0.2),
+			Vector3(-w * 0.5 - 0.2, -2.2, -l * 0.5 - 0.2), Vector3(w * 0.5 + 0.2, -2.2, -l * 0.5 - 0.2)]:
+		_box(Vector3(0.3, 3.4, 0.3), corner, body_col)
+	# backbox with glowing panel at the far (top) end
+	_box(Vector3(w + 1.0, 4.6, 0.9), Vector3(0, 2.0, -(l * 0.5 + 1.0)), body_col)
+	_box(Vector3(w - 1.0, 3.4, 0.1), Vector3(0, 2.1, -(l * 0.5 + 0.52)), Color(0.15, 0.1, 0.35), 1.3)
+	# floor far below
+	_box(Vector3(90, 0.2, 90), Vector3(0, -4.0, 0), Color(0.03, 0.03, 0.05))
+
+
+func _box(size: Vector3, pos: Vector3, color: Color, emission := 0.0) -> void:
+	var mesh := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	mesh.mesh = box
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.7
+	if emission > 0.0:
+		mat.emission_enabled = true
+		mat.emission = color
+		mat.emission_energy_multiplier = emission
+	mesh.material_override = mat
+	mesh.position = pos
+	add_child(mesh)
 
 
 func _table_to_world(p: Vector2) -> Vector3:
