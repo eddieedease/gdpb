@@ -25,8 +25,12 @@ const TABLE_SIZE := Vector2(1280, 2560)
 # the ball meets a bumper's skirt at floor level while the body towers above.
 
 ## Height of the mid / top tiers above the playfield, in metres.
-@export var mid_height := 0.14
-@export var top_height := 0.3
+@export var mid_height := 0.22
+@export var top_height := 0.42
+## Drop shadows: each tier is drawn a second time on the table surface,
+## darkened and offset, which anchors the raised pieces visually.
+@export var shadow_offset := Vector2(0.2, 0.16)
+@export var shadow_opacity := 0.45
 
 ## Camera height above the table plane.
 @export var camera_height := 8.2
@@ -84,6 +88,8 @@ func _ready() -> void:
 			child.reparent(_vp_mid)
 			_rehome_physics(child, space)
 	_add_screen(_vp.get_texture(), 0.0, false)
+	_add_shadow(_vp_mid.get_texture(), 0.012, 0.6)
+	_add_shadow(_vp_top.get_texture(), 0.024, 1.0)
 	_add_screen(_vp_mid.get_texture(), mid_height, true)
 	_add_screen(_vp_top.get_texture(), top_height, true)
 
@@ -113,6 +119,25 @@ func _rehome_physics(node: Node, space: RID) -> void:
 		PhysicsServer2D.body_set_space(node.get_rid(), space)
 	for c in node.get_children():
 		_rehome_physics(c, space)
+
+
+## A darkened, offset copy of a tier texture drawn just above the table
+## surface - reads as the tier's drop shadow. Higher tiers get a larger
+## offset (offset_scale) so taller pieces cast a longer shadow.
+func _add_shadow(tex: Texture2D, height: float, offset_scale: float) -> void:
+	var mesh := MeshInstance3D.new()
+	var quad := QuadMesh.new()
+	quad.size = TABLE_SIZE / PX_PER_M
+	mesh.mesh = quad
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_texture = tex
+	mat.albedo_color = Color(0, 0, 0, shadow_opacity)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mesh.material_override = mat
+	mesh.rotation_degrees.x = -90.0
+	mesh.position = Vector3(shadow_offset.x * offset_scale, height, shadow_offset.y * offset_scale)
+	add_child(mesh)
 
 
 func _add_screen(tex: Texture2D, height: float, transparent: bool) -> void:
