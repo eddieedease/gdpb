@@ -10,9 +10,9 @@ extends Path2D
 
 const RAMP_BIT := 1 << 3  # physics layer 4, reserved for ramps
 
-## Keep this snug: ball diameter is 28, so ~44 reads as the ball filling the
+## Keep this snug: ball diameter is 28, so ~38 reads as the ball filling the
 ## channel (the lock steering means it doesn't need physical slop).
-@export var channel_width := 44.0:
+@export var channel_width := 38.0:
 	set(v):
 		channel_width = v
 		_refresh()
@@ -222,6 +222,7 @@ func _on_mouth_entered(body: Node, inward: Vector2) -> void:
 	body.collision_mask = RAMP_BIT
 	body.z_index = 10
 	body.set_meta("on_ramp", true)
+	body.set_meta("channel", self)   # lets the 3D view follow this channel's height profile
 	var speed: float = body.linear_velocity.length()
 	if not _riding.has(body):
 		_riding.append(body)
@@ -256,6 +257,7 @@ func _release(body: Node) -> void:
 	body.collision_mask = 1
 	body.z_index = 0
 	body.set_meta("on_ramp", false)
+	body.set_meta("channel", null)
 	_riding.erase(body)
 
 

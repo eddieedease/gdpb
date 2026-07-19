@@ -127,9 +127,25 @@ func _make_tier_viewport() -> SubViewport:
 	return vp
 
 
+## A channel's peak height scales with its length: short ramps stay low,
+## long ones rise to the full top tier.
+func _channel_peak(ramp: Node2D) -> float:
+	if ramp.get("curve") == null:
+		return top_height
+	return top_height * clampf(ramp.curve.get_baked_length() / 800.0, 0.35, 1.0)
+
+
+## Height of a channel at parameter t (0..1): smoothstep rise over the first
+## and last 30%, flat along the middle. Shared by the rail ribbons, the
+## support rings AND the riding ball, so they always agree.
+func _channel_h(ramp: Node2D, t: float) -> float:
+	var k := clampf(minf(t, 1.0 - t) / 0.3, 0.0, 1.0)
+	return _channel_peak(ramp) * k * k * (3.0 - 2.0 * k)
+
+
 ## Replace a ramp's flat 2D rail art with 3D ribbons that rise from board
-## level at each mouth to top_height along the middle - the visual "pass"
-## between levels. Built from the ramp's own Left/Right polylines.
+## level at each mouth along the channel's height profile - plus habitrail
+## style rings ('O's) at the mouths and along the run, with support posts.
 func _build_ramp_rails(ramp: Node2D) -> void:
 	# Handle ramps nested inside other ramps too (easy to create by accident
 	# when instancing in the editor).
@@ -153,9 +169,7 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 		sh.begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
 		for i in n:
 			var t := float(i) / float(n - 1)
-			# smoothstep rise over the first/last 30% of the curve
-			var k := clampf(minf(t, 1.0 - t) / 0.3, 0.0, 1.0)
-			var h := top_height * k * k * (3.0 - 2.0 * k)
+			var h := _channel_h(ramp, t)
 			var w := _table_to_world(line.to_global(pts[i]))
 			st.add_vertex(Vector3(w.x, h + 0.02, w.z))
 			st.add_vertex(Vector3(w.x, h - 0.035, w.z))
@@ -164,7 +178,7 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 			var p_next := pts[mini(i + 1, n - 1)]
 			var tang := (p_next - p_prev).normalized()
 			var perp := Vector3(-tang.y, 0.0, tang.x) * 0.04
-			var a := clampf(h / maxf(top_height, 0.001), 0.0, 1.0) * 0.4
+			var a := clampf(h / maxf(_channel_peak(ramp), 0.001), 0.0, 1.0) * 0.4
 			var s := Vector3(w.x, 0.012, w.z)   # offset applied per-frame (camera)
 			sh.set_color(Color(0, 0, 0, a))
 			sh.add_vertex(s + perp)
@@ -189,6 +203,59 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 		add_child(smesh)
 		_shadows.append([smesh, 1.0])
 		line.visible = false
+
+	_build_channel_rings(ramp)
+
+
+## Habitrail rings: an 'O' at each mouth and hoops along the run (one per
+## ~250px of curve), each with a support post down to the board - the second
+## structure layer that sells the rail as a built object.
+func _build_channel_rings(ramp: Node2D) -> void:
+	if ramp.get("curve") == null:
+		return
+	var cpts: PackedVector2Array = ramp.curve.tessellate(5, 4.0)
+	var n := cpts.size()
+	if n < 2:
+		return
+	var ref_line: Line2D = ramp.get_node_or_null("Left")
+	var col: Color = ref_line.default_color.lightened(0.15) if ref_line else Color(0.7, 0.8, 1.0)
+	var count := clampi(int(ramp.curve.get_baked_length() / 250.0), 1, 8)
+	for r in count + 1:
+		var t := float(r) / float(count)
+		var idx := clampi(int(t * (n - 1)), 0, n - 1)
+		var p := _table_to_world(ramp.to_global(cpts[idx]))
+		var h := _channel_h(ramp, t)
+		var i2 := clampi(idx + 1, 0, n - 1)
+		var i1 := clampi(idx - 1, 0, n - 1)
+		var tang3 := _table_to_world(ramp.to_global(cpts[i2])) - _table_to_world(ramp.to_global(cpts[i1]))
+		var yaw := atan2(tang3.x, tang3.z)
+
+		var ring := MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.185
+		torus.outer_radius = 0.215
+		ring.mesh = torus
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.albedo_color = col
+		ring.material_override = mat
+		ring.position = Vector3(p.x, h + BALL_R, p.z)
+		ring.rotation = Vector3(PI * 0.5, yaw, 0.0)
+		add_child(ring)
+
+		# support post from the board up to the ring's underside
+		var post_h := h + BALL_R - 0.19
+		if post_h > 0.03:
+			var post := MeshInstance3D.new()
+			var box := BoxMesh.new()
+			box.size = Vector3(0.025, post_h, 0.025)
+			post.mesh = box
+			var pmat := StandardMaterial3D.new()
+			pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			pmat.albedo_color = Color(0.25, 0.28, 0.38)
+			post.material_override = pmat
+			post.position = Vector3(p.x, post_h * 0.5, p.z)
+			add_child(post)
 
 
 ## Move every physics body/area under `node` into the table's physics space so
@@ -468,8 +535,19 @@ func _update_balls(delta: float, shadow_dir: Vector2) -> void:
 				spr.visible = false
 			_ball_fx[id] = _make_ball_fx()
 		var fx: Dictionary = _ball_fx[id]
-		var target_lift := top_height if b.get_meta("on_ramp", false) else 0.0
-		var lift: float = lerpf(fx.lift, target_lift, 1.0 - exp(-9.0 * delta))
+		# While riding a channel, the ball's height follows that channel's own
+		# slope profile at its current position - it rolls up the entry, along
+		# the top, and down the exit in sync with the rail visuals.
+		var target_lift := 0.0
+		if b.get_meta("on_ramp", false):
+			var chan = b.get_meta("channel", null)
+			if chan != null and is_instance_valid(chan) and chan.get("curve") != null:
+				var local: Vector2 = chan.to_local(b.global_position)
+				var off: float = chan.curve.get_closest_offset(local)
+				target_lift = _channel_h(chan, off / maxf(chan.curve.get_baked_length(), 1.0))
+			else:
+				target_lift = top_height
+		var lift: float = lerpf(fx.lift, target_lift, 1.0 - exp(-16.0 * delta))
 		fx.lift = lift
 		var w := _table_to_world(b.global_position)
 		fx.sphere.position = Vector3(w.x, BALL_R + lift, w.z)

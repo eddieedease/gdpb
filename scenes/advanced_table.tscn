@@ -240,10 +240,18 @@ position = Vector2(833.00006, 852)
 rotation = -1.0062875
 scale = Vector2(1, 1.1728023)
 curve = SubResource("Curve2D_gep3k")
+channel_width = 70.0
+mouth_flare = null
+guide_strength = 6.0
+centering = 8.0
 
 [node name="ExampleRamp" parent="." unique_id=588782854 instance=ExtResource("17_ramp")]
 position = Vector2(640, 461)
 curve = SubResource("Curve2D_2gl5b")
+channel_width = 70.0
+mouth_flare = null
+guide_strength = 6.0
+centering = 8.0
 
 [node name="Ambiance" type="CanvasLayer" parent="." unique_id=692629535]
 layer = 5
@@ -263,6 +271,10 @@ color = Color(0.7285387, 0.7285387, 0.7285387, 0.90588236)
 position = Vector2(323, 1501.0001)
 rotation = -1.2140095
 curve = SubResource("Curve2D_upohv")
+channel_width = 70.0
+mouth_flare = null
+guide_strength = 6.0
+centering = 8.0
 
 [node name="DropTarget3" type="StaticBody2D" parent="." unique_id=153143360 groups=["drop_targets"]]
 position = Vector2(336, 1057)
