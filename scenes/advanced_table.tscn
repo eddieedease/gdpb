@@ -117,7 +117,7 @@ position = Vector2(316, 816)
 
 [node name="Bumper2" parent="." unique_id=1613699457 instance=ExtResource("7_t1bve")]
 modulate = Color(1, 0.85, 0.6, 1)
-position = Vector2(942, 816)
+position = Vector2(975, 495)
 
 [node name="Bumper3" parent="." unique_id=313051755 instance=ExtResource("7_t1bve")]
 modulate = Color(0.8, 1, 0.85, 1)

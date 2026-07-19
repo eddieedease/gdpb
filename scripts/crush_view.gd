@@ -28,8 +28,10 @@ const TABLE_SIZE := Vector2(1280, 2560)
 @export var mid_height := 0.11
 @export var top_height := 0.21
 ## Drop shadows: each tier is drawn a second time on the table surface,
-## darkened and offset, which anchors the raised pieces visually.
-@export var shadow_offset := Vector2(0.07, 0.055)
+## darkened and offset. The offset direction follows the CAMERA each frame
+## (shadows fall toward the viewer), so the perspective reads correctly as
+## the camera moves.
+@export var shadow_reach := 0.09
 @export var shadow_opacity := 0.45
 
 ## Camera height above the table plane.
@@ -50,6 +52,8 @@ var _vp_mid: SubViewport
 var _vp_top: SubViewport
 var _last_ball := Vector2(1120, 2360)   # start aimed at the plunger
 var _punch := 0.0
+var _shadows: Array = []      # [MeshInstance3D, reach factor]
+var _ball_fx := {}            # ball instance_id -> {sphere, blob, blob_mat, lift}
 
 
 func _ready() -> void:
@@ -95,7 +99,7 @@ func _ready() -> void:
 			child.reparent(_vp_mid)
 			_rehome_physics(child, space)
 	_add_screen(_vp.get_texture(), 0.0, false)
-	_add_shadow(_vp_mid.get_texture(), 0.012, 0.6)
+	_add_shadow(_vp_mid.get_texture(), 0.012, 0.55)
 	_add_shadow(_vp_top.get_texture(), 0.024, 1.0)
 	_add_screen(_vp_mid.get_texture(), mid_height, true)
 	_add_screen(_vp_top.get_texture(), top_height, true)
@@ -155,7 +159,7 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 			var tang := (p_next - p_prev).normalized()
 			var perp := Vector3(-tang.y, 0.0, tang.x) * 0.04
 			var a := clampf(h / maxf(top_height, 0.001), 0.0, 1.0) * 0.4
-			var s := Vector3(w.x + 0.05, 0.012, w.z + 0.04)   # slight light offset
+			var s := Vector3(w.x, 0.012, w.z)   # offset applied per-frame (camera)
 			sh.set_color(Color(0, 0, 0, a))
 			sh.add_vertex(s + perp)
 			sh.set_color(Color(0, 0, 0, a))
@@ -177,6 +181,7 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 		smat.cull_mode = BaseMaterial3D.CULL_DISABLED
 		smesh.material_override = smat
 		add_child(smesh)
+		_shadows.append([smesh, 1.0])
 		line.visible = false
 
 
@@ -191,10 +196,10 @@ func _rehome_physics(node: Node, space: RID) -> void:
 		_rehome_physics(c, space)
 
 
-## A darkened, offset copy of a tier texture drawn just above the table
-## surface - reads as the tier's drop shadow. Higher tiers get a larger
-## offset (offset_scale) so taller pieces cast a longer shadow.
-func _add_shadow(tex: Texture2D, height: float, offset_scale: float) -> void:
+## A darkened copy of a tier texture drawn just above the table surface -
+## the tier's drop shadow. Its offset is set every frame from the camera
+## direction (see _process); taller tiers get a larger reach factor.
+func _add_shadow(tex: Texture2D, height: float, reach_factor: float) -> void:
 	var mesh := MeshInstance3D.new()
 	var quad := QuadMesh.new()
 	quad.size = TABLE_SIZE / PX_PER_M
@@ -206,8 +211,9 @@ func _add_shadow(tex: Texture2D, height: float, offset_scale: float) -> void:
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mesh.material_override = mat
 	mesh.rotation_degrees.x = -90.0
-	mesh.position = Vector3(shadow_offset.x * offset_scale, height, shadow_offset.y * offset_scale)
+	mesh.position = Vector3(0, height, 0)
 	add_child(mesh)
+	_shadows.append([mesh, reach_factor])
 
 
 func _add_screen(tex: Texture2D, height: float, transparent: bool) -> void:
@@ -300,6 +306,67 @@ func _table_to_world(p: Vector2) -> Vector3:
 	return Vector3((p.x - TABLE_SIZE.x * 0.5) / PX_PER_M, 0.0, (p.y - TABLE_SIZE.y * 0.5) / PX_PER_M)
 
 
+# ---------------------------------------------------------------- 3D ball
+const BALL_R := 0.14   # 14px 2D ball radius
+
+func _make_ball_fx() -> Dictionary:
+	var sphere := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = BALL_R
+	sm.height = BALL_R * 2.0
+	sphere.mesh = sm
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.82, 0.84, 0.9)
+	mat.metallic = 0.7
+	mat.roughness = 0.25
+	sphere.material_override = mat
+	add_child(sphere)
+
+	var blob := MeshInstance3D.new()
+	var bm := SphereMesh.new()
+	bm.radius = BALL_R * 1.15
+	bm.height = 0.02
+	blob.mesh = bm
+	var bmat := StandardMaterial3D.new()
+	bmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bmat.albedo_color = Color(0, 0, 0, 0.45)
+	bmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	blob.material_override = bmat
+	add_child(blob)
+	return {"sphere": sphere, "blob": blob, "blob_mat": bmat, "lift": 0.0}
+
+
+## The 2D ball sprite is hidden and replaced with a shaded 3D sphere that
+## lifts to top-tier height while riding a ramp/rail - real elevation.
+func _update_balls(delta: float, shadow_dir: Vector2) -> void:
+	var seen := {}
+	for b in get_tree().get_nodes_in_group("ball"):
+		if not (b is Node2D):
+			continue
+		var id := b.get_instance_id()
+		seen[id] = true
+		if not _ball_fx.has(id):
+			var spr: CanvasItem = b.get_node_or_null("Sprite2D")
+			if spr:
+				spr.visible = false
+			_ball_fx[id] = _make_ball_fx()
+		var fx: Dictionary = _ball_fx[id]
+		var target_lift := top_height if b.get_meta("on_ramp", false) else 0.0
+		var lift: float = lerpf(fx.lift, target_lift, 1.0 - exp(-9.0 * delta))
+		fx.lift = lift
+		var w := _table_to_world(b.global_position)
+		fx.sphere.position = Vector3(w.x, BALL_R + lift, w.z)
+		var reach: float = shadow_reach * (0.5 + lift * 6.0)
+		fx.blob.position = Vector3(w.x + shadow_dir.x * reach, 0.014, w.z + shadow_dir.y * reach)
+		var k: float = clampf(lift / maxf(top_height, 0.01), 0.0, 1.0)
+		fx.blob_mat.albedo_color = Color(0, 0, 0, lerpf(0.45, 0.25, k))
+	for id in _ball_fx.keys().duplicate():
+		if not seen.has(id):
+			_ball_fx[id].sphere.queue_free()
+			_ball_fx[id].blob.queue_free()
+			_ball_fx.erase(id)
+
+
 func _on_impact(strength: float) -> void:
 	_punch = minf(_punch + strength * 0.02, 0.45)
 
@@ -308,6 +375,21 @@ func _process(delta: float) -> void:
 	var balls := get_tree().get_nodes_in_group("ball")
 	if not balls.is_empty():
 		_last_ball = balls[0].global_position
+
+	# Shadows fall away from the camera's look direction (toward the viewer),
+	# updating as the camera moves for a consistent perspective.
+	var fwd := -_cam.global_transform.basis.z
+	var g := Vector2(fwd.x, fwd.z)
+	var shadow_dir := Vector2(0, 1)
+	if g.length() > 0.01:
+		shadow_dir = -g.normalized()
+	for s in _shadows:
+		var m: MeshInstance3D = s[0]
+		var f: float = s[1]
+		m.position.x = shadow_dir.x * shadow_reach * f
+		m.position.z = shadow_dir.y * shadow_reach * f
+	_update_balls(delta, shadow_dir)
+
 	var b := _table_to_world(_last_ball)
 	b.x *= side_follow
 	b.z = clampf(b.z, -TABLE_SIZE.y * 0.5 / PX_PER_M, TABLE_SIZE.y * 0.5 / PX_PER_M)
