@@ -133,7 +133,7 @@ func _on_drain_body_entered(body: Node) -> void:
 
 func _on_rollover(body: Node, _area: Area2D) -> void:
 	if body.is_in_group("ball"):
-		GameManager.add_score(250)
+		GameManager.add_score(250, _area.global_position)
 		SoundManager.play("target")
 
 
@@ -141,7 +141,7 @@ func _on_drop_hit(_target) -> void:
 	_drops_down += 1
 	if _drops_down >= _drops.size() and not _resetting_bank:
 		_resetting_bank = true
-		GameManager.add_score(5000)
+		GameManager.add_score(5000, _target.global_position)
 		SoundManager.play("target", 0.7)
 		await get_tree().create_timer(1.2).timeout
 		for d in _drops:

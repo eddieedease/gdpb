@@ -233,7 +233,7 @@ func _on_mouth_entered(body: Node, inward: Vector2) -> void:
 		_last_whoosh_ms = now
 		SoundManager.play("whoosh", lerpf(0.95, 1.2, clampf((speed - whoosh_min_speed) / 1600.0, 0.0, 1.0)))
 	if ramp_score > 0:
-		GameManager.add_score(ramp_score)
+		GameManager.add_score(ramp_score, body.global_position)
 
 
 func _on_field_exited(body: Node) -> void:

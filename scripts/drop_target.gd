@@ -42,7 +42,7 @@ func on_ball_hit(_ball: RigidBody2D) -> void:
 	_collision.set_deferred("disabled", true)
 	if _visual:
 		_visual.visible = false
-	GameManager.add_score(points)
+	GameManager.add_score(points, global_position)
 	GameManager.impact.emit(6.0)
 	SoundManager.play("target")
 	hit.emit(self)

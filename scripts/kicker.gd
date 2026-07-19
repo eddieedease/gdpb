@@ -32,7 +32,7 @@ func on_ball_hit(ball: RigidBody2D) -> void:
 		if dir == Vector2.ZERO:
 			dir = Vector2.UP
 		ball.linear_velocity = dir * kick_speed
-	GameManager.add_score(points)
+	GameManager.add_score(points, global_position)
 	GameManager.impact.emit(clampf(kick_speed / 60.0, 4.0, 16.0))
 	SoundManager.play(_resolve_sound_type())
 	_flash()

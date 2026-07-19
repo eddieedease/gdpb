@@ -116,6 +116,28 @@ func _ready() -> void:
 	_cam.fov = camera_fov
 	_cam.position = _table_to_world(_last_ball) + Vector3(0, camera_height, camera_back)
 	GameManager.impact.connect(_on_impact)
+	GameManager.points_scored.connect(_on_points_scored)
+	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
+
+
+## Yellow "+N" popup rising from the piece that scored.
+func _on_points_scored(points: int, at: Vector2) -> void:
+	var lbl := Label3D.new()
+	lbl.text = "+%d" % points
+	lbl.font_size = 110
+	lbl.outline_size = 26
+	lbl.modulate = Color(1.0, 0.88, 0.2)
+	lbl.outline_modulate = Color(0.25, 0.12, 0.0)
+	lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl.no_depth_test = true
+	var w := _table_to_world(at)
+	lbl.position = Vector3(w.x, 0.5, w.z)
+	add_child(lbl)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(lbl, "position:y", 1.3, 0.85).set_ease(Tween.EASE_OUT)
+	tw.tween_property(lbl, "modulate:a", 0.0, 0.85).set_ease(Tween.EASE_IN)
+	tw.chain().tween_callback(lbl.queue_free)
 
 
 func _make_tier_viewport() -> SubViewport:
@@ -365,8 +387,61 @@ func _build_cabinet() -> void:
 	# backbox with glowing panel at the far (top) end
 	_box(Vector3(w + 1.0, 4.6, 0.9), Vector3(0, 2.0, -(l * 0.5 + 1.0)), body_col)
 	_box(Vector3(w - 1.0, 3.4, 0.1), Vector3(0, 2.1, -(l * 0.5 + 0.52)), Color(0.15, 0.1, 0.35), 1.3)
-	# floor far below
-	_box(Vector3(90, 0.2, 90), Vector3(0, -4.0, 0), Color(0.03, 0.03, 0.05))
+	_build_grid_floor()
+	_build_starfield()
+
+
+## Synthwave grid floor far below the cabinet.
+const GRID_SHADER := "
+shader_type spatial;
+render_mode unshaded, cull_disabled;
+varying vec3 wpos;
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+	vec2 g = abs(fract(wpos.xz / 3.0) - 0.5);
+	float line = smoothstep(0.44, 0.5, max(g.x, g.y));
+	float fade = clamp(1.0 - length(wpos.xz) / 65.0, 0.0, 1.0);
+	ALBEDO = mix(vec3(0.015, 0.015, 0.04), vec3(0.12, 0.45, 0.65), line * fade * 0.9);
+}
+"
+
+func _build_grid_floor() -> void:
+	var mesh := MeshInstance3D.new()
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(140, 140)
+	mesh.mesh = plane
+	var sh := Shader.new()
+	sh.code = GRID_SHADER
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	mesh.material_override = mat
+	mesh.position = Vector3(0, -4.0, 0)
+	add_child(mesh)
+
+
+## Faint stars scattered around the void.
+func _build_starfield() -> void:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.3, 0.3)
+	mm.mesh = quad
+	mm.instance_count = 260
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in mm.instance_count:
+		var dir := Vector3(rng.randf_range(-1, 1), rng.randf_range(0.05, 1), rng.randf_range(-1, 1)).normalized()
+		var pos := dir * rng.randf_range(45.0, 75.0)
+		mm.set_instance_transform(i, Transform3D(Basis(), pos))
+	var inst := MultiMeshInstance3D.new()
+	inst.multimesh = mm
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.albedo_color = Color(0.75, 0.85, 1.0, 0.85)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	inst.material_override = mat
+	add_child(inst)
 
 
 func _box(size: Vector3, pos: Vector3, color: Color, emission := 0.0) -> void:

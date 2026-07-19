@@ -16,6 +16,7 @@ func _ready() -> void:
 	win.content_scale_size = Vector2i(1280, 720)
 
 	_add_joypad_ui_nav()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
 	var bg := ColorRect.new()
