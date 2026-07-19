@@ -35,12 +35,12 @@ size = Vector2(1280, 80)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_dqafr"]
 size = Vector2(1280, 2560)
 
-[sub_resource type="Curve2D" id="Curve2D_gep3k"]
+[sub_resource type="Curve2D" id="Curve2D_djj64"]
 resource_local_to_scene = true
 _data = {
-"points": PackedVector2Array(-61.3171, 70.71116, 0, 0, -140, 40, 0, 0, 0, 0, -60.80017, -8.15686, 0, 0, 0, 0, 261.2328, -207.6612, 0, 0, 0, 0, 368.2727, -240.64569, 234.55101, -132.95148, -234.55101, 132.95148, 508.86215, 7.829956)
+"points": PackedVector2Array(0, 0, 0, 0, -193.34302, 108.89667, -52.359455, 32.18237, 52.359455, -32.18237, -54.069824, -4.0926514, 0, 0, 0, 0, 18.205627, -42.84326, 0, 0, 0, 0, 379.57715, -255.302, -104.75783, 57.57081, 104.75783, -57.57081, 514.2295, -331.27875, 121.906166, -70.6318, -121.906166, 70.6318, 684.14417, -89.06592, 0, 0, 0, 0, 164.36285, 219.38513, 0, 0, -40.408333, 8.647825, 128.0354, 231.05707, 0, 0, 0, 0, -84.321655, 300.96503)
 }
-point_count = 5
+point_count = 9
 
 [sub_resource type="ShaderMaterial" id="shader_vignette"]
 shader = ExtResource("18_vignette")
@@ -221,11 +221,13 @@ position = Vector2(1107, 1920)
 rotation = -0.12
 
 [node name="ExampleRail" parent="." unique_id=689590988 instance=ExtResource("16_rail")]
-position = Vector2(506.05466, 795.30115)
+position = Vector2(511, 1524)
 rotation = -1.0062875
-scale = Vector2(1, 1.1120014)
-curve = SubResource("Curve2D_gep3k")
-channel_width = 70.0
+scale = Vector2(1.0395514, 1.1361759)
+curve = SubResource("Curve2D_djj64")
+channel_width = 50.0
+mouth_flare = 0.885
+smoothness = 2.982
 guide_strength = 6.0
 centering = 8.0
 
