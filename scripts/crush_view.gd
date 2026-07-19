@@ -143,118 +143,129 @@ func _channel_h(ramp: Node2D, t: float) -> float:
 	return _channel_peak(ramp) * k * k * (3.0 - 2.0 * k)
 
 
-## Replace a ramp's flat 2D rail art with 3D ribbons that rise from board
-## level at each mouth along the channel's height profile - plus habitrail
-## style rings ('O's) at the mouths and along the run, with support posts.
+## Channels are drawn as WIREFORM tubes (like real habitrail ramps): five
+## longitudinal wires wrapping the ball (open top), a funnel that widens to
+## each opening, ball-sized 'O' rings at the throats and along the run, and
+## support posts. Built from the channel's centre curve.
+const TUBE_R := 0.165          # wire ring radius: ball (0.14) + clearance
+const WIRE_HALF := 0.008       # wire thickness
+const WIRE_ANGLES := [-90.0, -45.0, -135.0, 0.0, 180.0]  # bottom, diagonals, sides
+
 func _build_ramp_rails(ramp: Node2D) -> void:
-	# Handle ramps nested inside other ramps too (easy to create by accident
-	# when instancing in the editor).
+	# Handle ramps nested inside other ramps too.
 	for c in ramp.get_children():
 		if c is Node2D and c.get_node_or_null("Left") != null:
 			_build_ramp_rails(c)
-	for rail_name in ["Left", "Right"]:
-		var line: Line2D = ramp.get_node_or_null(rail_name)
-		if line == null or line.points.size() < 2:
-			continue
-		var pts := line.points
-		var n := pts.size()
-		# Thin wire-like ribbon (a deep band reads as a fence standing on the
-		# board; a shallow one reads as an elevated rail).
-		var st := SurfaceTool.new()
-		st.begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
-		# Matching shadow strip painted on the board, fading IN as the rail
-		# rises - so the rail is visually attached only at its mouths and
-		# clearly floats with air underneath everywhere else.
-		var sh := SurfaceTool.new()
-		sh.begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
-		for i in n:
-			var t := float(i) / float(n - 1)
-			var h := _channel_h(ramp, t)
-			var w := _table_to_world(line.to_global(pts[i]))
-			st.add_vertex(Vector3(w.x, h + 0.02, w.z))
-			st.add_vertex(Vector3(w.x, h - 0.035, w.z))
-			# horizontal direction of the rail at this point, for shadow width
-			var p_prev := pts[maxi(i - 1, 0)]
-			var p_next := pts[mini(i + 1, n - 1)]
-			var tang := (p_next - p_prev).normalized()
-			var perp := Vector3(-tang.y, 0.0, tang.x) * 0.04
-			var a := clampf(h / maxf(_channel_peak(ramp), 0.001), 0.0, 1.0) * 0.4
-			var s := Vector3(w.x, 0.012, w.z)   # offset applied per-frame (camera)
-			sh.set_color(Color(0, 0, 0, a))
-			sh.add_vertex(s + perp)
-			sh.set_color(Color(0, 0, 0, a))
-			sh.add_vertex(s - perp)
-		var mesh := MeshInstance3D.new()
-		mesh.mesh = st.commit()
-		var mat := StandardMaterial3D.new()
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.albedo_color = line.default_color   # ramps orange, rails blue
-		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-		mesh.material_override = mat
-		add_child(mesh)
-		var smesh := MeshInstance3D.new()
-		smesh.mesh = sh.commit()
-		var smat := StandardMaterial3D.new()
-		smat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		smat.vertex_color_use_as_albedo = true
-		smat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		smat.cull_mode = BaseMaterial3D.CULL_DISABLED
-		smesh.material_override = smat
-		add_child(smesh)
-		_shadows.append([smesh, 1.0])
-		line.visible = false
-
-	_build_channel_rings(ramp)
-
-
-## Habitrail rings: an 'O' at each mouth and hoops along the run (one per
-## ~250px of curve), each with a support post down to the board - the second
-## structure layer that sells the rail as a built object.
-func _build_channel_rings(ramp: Node2D) -> void:
-	if ramp.get("curve") == null:
+	var left_line: Line2D = ramp.get_node_or_null("Left")
+	var right_line: Line2D = ramp.get_node_or_null("Right")
+	if left_line == null or ramp.get("curve") == null:
 		return
-	var cpts: PackedVector2Array = ramp.curve.tessellate(5, 4.0)
+	left_line.visible = false
+	if right_line:
+		right_line.visible = false
+	var col: Color = left_line.default_color
+
+	var cpts: PackedVector2Array = ramp.curve.tessellate(6, 3.0)
 	var n := cpts.size()
 	if n < 2:
 		return
-	var ref_line: Line2D = ramp.get_node_or_null("Left")
-	var col: Color = ref_line.default_color.lightened(0.15) if ref_line else Color(0.7, 0.8, 1.0)
-	var count := clampi(int(ramp.curve.get_baked_length() / 250.0), 1, 8)
-	for r in count + 1:
-		var t := float(r) / float(count)
+	# Centreline frames: position at ball-centre height, horizontal normal,
+	# and tube radius (flared into a funnel over the first/last 8%).
+	var centers: Array[Vector3] = []
+	var normals: Array[Vector3] = []
+	var radii := PackedFloat32Array()
+	for i in n:
+		var t := float(i) / float(n - 1)
+		var w := _table_to_world(ramp.to_global(cpts[i]))
+		centers.append(Vector3(w.x, _channel_h(ramp, t) + BALL_R, w.z))
+		var p_prev := cpts[maxi(i - 1, 0)]
+		var p_next := cpts[mini(i + 1, n - 1)]
+		var tg := (p_next - p_prev).normalized()
+		normals.append(Vector3(-tg.y, 0.0, tg.x))
+		var k := clampf(minf(t, 1.0 - t) / 0.08, 0.0, 1.0)
+		radii.append(TUBE_R * lerpf(2.1, 1.0, k * k * (3.0 - 2.0 * k)))
+
+	# --- the wires ---
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for phi_deg in WIRE_ANGLES:
+		var phi := deg_to_rad(phi_deg)
+		var cph := cos(phi)
+		var sph := sin(phi)
+		for i in n - 1:
+			var a := centers[i] + normals[i] * cph * radii[i] + Vector3.UP * sph * radii[i]
+			var b := centers[i + 1] + normals[i + 1] * cph * radii[i + 1] + Vector3.UP * sph * radii[i + 1]
+			var up := Vector3.UP * WIRE_HALF
+			_quad(st, a + up, b + up, b - up, a - up, col)
+			_quad(st, a + normals[i] * WIRE_HALF, b + normals[i + 1] * WIRE_HALF,
+					b - normals[i + 1] * WIRE_HALF, a - normals[i] * WIRE_HALF, col)
+	var mesh := MeshInstance3D.new()
+	mesh.mesh = st.commit()
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.vertex_color_use_as_albedo = true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.material_override = mat
+	add_child(mesh)
+
+	# --- shadow strip on the board, fading in with height ---
+	var sh := SurfaceTool.new()
+	sh.begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+	for i in n:
+		var lift := centers[i].y - BALL_R
+		var a2 := clampf(lift / maxf(_channel_peak(ramp), 0.001), 0.0, 1.0) * 0.4
+		var s := Vector3(centers[i].x, 0.012, centers[i].z)
+		sh.set_color(Color(0, 0, 0, a2))
+		sh.add_vertex(s + normals[i] * TUBE_R)
+		sh.set_color(Color(0, 0, 0, a2))
+		sh.add_vertex(s - normals[i] * TUBE_R)
+	var smesh := MeshInstance3D.new()
+	smesh.mesh = sh.commit()
+	var smat := StandardMaterial3D.new()
+	smat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	smat.vertex_color_use_as_albedo = true
+	smat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	smat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	smesh.material_override = smat
+	add_child(smesh)
+	_shadows.append([smesh, 1.0])
+
+	# --- 'O' rings: at each funnel throat and every ~180px along the tube ---
+	var length: float = ramp.curve.get_baked_length()
+	var ring_ts: Array[float] = [0.08, 0.92]
+	var between := int(length * 0.84 / 180.0)
+	for r in range(1, between):
+		ring_ts.append(0.08 + 0.84 * float(r) / float(between))
+	for t in ring_ts:
 		var idx := clampi(int(t * (n - 1)), 0, n - 1)
-		var p := _table_to_world(ramp.to_global(cpts[idx]))
-		var h := _channel_h(ramp, t)
+		var c3 := centers[idx]
 		var i2 := clampi(idx + 1, 0, n - 1)
 		var i1 := clampi(idx - 1, 0, n - 1)
-		var tang3 := _table_to_world(ramp.to_global(cpts[i2])) - _table_to_world(ramp.to_global(cpts[i1]))
+		var tang3 := centers[i2] - centers[i1]
 		var yaw := atan2(tang3.x, tang3.z)
-
 		var ring := MeshInstance3D.new()
 		var torus := TorusMesh.new()
-		torus.inner_radius = 0.185
-		torus.outer_radius = 0.215
+		torus.inner_radius = TUBE_R - 0.006
+		torus.outer_radius = TUBE_R + 0.016
 		ring.mesh = torus
-		var mat := StandardMaterial3D.new()
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.albedo_color = col
-		ring.material_override = mat
-		ring.position = Vector3(p.x, h + BALL_R, p.z)
+		var rmat := StandardMaterial3D.new()
+		rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		rmat.albedo_color = col.lightened(0.2)
+		ring.material_override = rmat
+		ring.position = c3
 		ring.rotation = Vector3(PI * 0.5, yaw, 0.0)
 		add_child(ring)
-
-		# support post from the board up to the ring's underside
-		var post_h := h + BALL_R - 0.19
+		var post_h := c3.y - TUBE_R
 		if post_h > 0.03:
 			var post := MeshInstance3D.new()
 			var box := BoxMesh.new()
-			box.size = Vector3(0.025, post_h, 0.025)
+			box.size = Vector3(0.022, post_h, 0.022)
 			post.mesh = box
 			var pmat := StandardMaterial3D.new()
 			pmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			pmat.albedo_color = Color(0.25, 0.28, 0.38)
 			post.material_override = pmat
-			post.position = Vector3(p.x, post_h * 0.5, p.z)
+			post.position = Vector3(c3.x, post_h * 0.5, c3.z)
 			add_child(post)
 
 
