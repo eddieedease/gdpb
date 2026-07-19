@@ -34,8 +34,8 @@ const TABLE_SIZE := Vector2(1280, 2560)
 ## darkened and offset. The offset direction follows the CAMERA each frame
 ## (shadows fall toward the viewer), so the perspective reads correctly as
 ## the camera moves.
-@export var shadow_reach := 0.09
-@export var shadow_opacity := 0.45
+@export var shadow_reach := 0.13
+@export var shadow_opacity := 0.5
 
 ## Camera height above the table plane.
 @export var camera_height := 8.2
@@ -493,13 +493,16 @@ func _process(delta: float) -> void:
 	if not balls.is_empty():
 		_last_ball = balls[0].global_position
 
-	# Shadows fall away from the camera's look direction (toward the viewer),
-	# updating as the camera moves for a consistent perspective.
+	# Shadow direction is camera-relative but falls mostly SIDEWAYS to the
+	# view (plus slightly toward the viewer): a shadow cast straight toward
+	# the camera hides behind the piece itself and reads as nothing.
 	var fwd := -_cam.global_transform.basis.z
 	var g := Vector2(fwd.x, fwd.z)
-	var shadow_dir := Vector2(0, 1)
+	var shadow_dir := Vector2(0.85, 0.4).normalized()
 	if g.length() > 0.01:
-		shadow_dir = -g.normalized()
+		g = g.normalized()
+		var right := Vector2(-g.y, g.x)
+		shadow_dir = (right * 0.85 - g * 0.4).normalized()
 	for s in _shadows:
 		var m: MeshInstance3D = s[0]
 		var f: float = s[1]

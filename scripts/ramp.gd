@@ -10,9 +10,17 @@ extends Path2D
 
 const RAMP_BIT := 1 << 3  # physics layer 4, reserved for ramps
 
-@export var channel_width := 70.0:
+## Keep this snug: ball diameter is 28, so ~44 reads as the ball filling the
+## channel (the lock steering means it doesn't need physical slop).
+@export var channel_width := 44.0:
 	set(v):
 		channel_width = v
+		_refresh()
+## The mouths flare open cone-like to this multiple of the channel width,
+## catching approach shots.
+@export var mouth_flare := 1.9:
+	set(v):
+		mouth_flare = v
 		_refresh()
 @export_range(1.0, 30.0) var smoothness := 4.0:
 	set(v):
@@ -25,8 +33,8 @@ const RAMP_BIT := 1 << 3  # physics layer 4, reserved for ramps
 ## The "sucked in" feel: while captured, the ball is steered along the curve
 ## (speed preserved), pulled gently to the centreline, and gravity inside the
 ## channel is reduced so momentum carries it through climbs.
-@export var guide_strength := 6.0
-@export var centering := 8.0
+@export var guide_strength := 9.0
+@export var centering := 16.0
 @export var channel_gravity := 250.0
 ## Minimum capture speed for the whoosh sound - a slow dribble that rolls
 ## back out of the mouth stays silent.
@@ -62,11 +70,19 @@ func _refresh() -> void:
 	if _left == null or _right == null or curve == null:
 		return
 	var center := curve.tessellate(5, smoothness)
-	_left.points = _offset(center, channel_width * 0.5)
-	_right.points = _offset(center, -channel_width * 0.5)
+	var n := center.size()
+	# Per-point half-width: flared cone at the mouths, snug along the middle.
+	var widths := PackedFloat32Array()
+	for i in n:
+		var t := float(i) / float(maxi(n - 1, 1))
+		var k := clampf(minf(t, 1.0 - t) / 0.12, 0.0, 1.0)
+		var sm := k * k * (3.0 - 2.0 * k)
+		widths.append(lerpf(mouth_flare, 1.0, sm) * channel_width * 0.5)
+	_left.points = _offset_var(center, widths, 1.0)
+	_right.points = _offset_var(center, widths, -1.0)
 
 
-func _offset(pts: PackedVector2Array, d: float) -> PackedVector2Array:
+func _offset_var(pts: PackedVector2Array, widths: PackedFloat32Array, side: float) -> PackedVector2Array:
 	var raw := PackedVector2Array()
 	var n := pts.size()
 	for i in n:
@@ -80,7 +96,7 @@ func _offset(pts: PackedVector2Array, d: float) -> PackedVector2Array:
 		if dir.length() < 0.001:
 			dir = Vector2.RIGHT
 		dir = dir.normalized()
-		raw.append(pts[i] + Vector2(-dir.y, dir.x) * d)
+		raw.append(pts[i] + Vector2(-dir.y, dir.x) * widths[i] * side)
 	return _remove_loops(raw)
 
 
@@ -182,7 +198,7 @@ func _make_mouth(at: Vector2, toward: Vector2) -> void:
 	area.collision_mask = 1   # playfield balls only
 	var cs := CollisionShape2D.new()
 	var circ := CircleShape2D.new()
-	circ.radius = channel_width * 0.7
+	circ.radius = channel_width * 0.6 * mouth_flare
 	cs.shape = circ
 	area.add_child(cs)
 	add_child(area)
@@ -220,9 +236,17 @@ func _on_mouth_entered(body: Node, inward: Vector2) -> void:
 
 
 func _on_field_exited(body: Node) -> void:
-	if not body.is_in_group("ball"):
+	if not body.is_in_group("ball") or not body.get_meta("on_ramp", false):
 		return
-	_release(body)
+	# The field polygon can pinch on tight bends, so leaving it does not by
+	# itself mean the ball left the channel. Only release if the ball is
+	# genuinely outside the corridor or past an end; otherwise keep the lock
+	# (the per-frame end/stray checks handle the real exit).
+	var local := to_local(body.global_position)
+	var off := curve.get_closest_offset(local)
+	var dist := local.distance_to(curve.sample_baked(off))
+	if dist > channel_width * 0.8 or off < 10.0 or off > curve.get_baked_length() - 10.0:
+		_release(body)
 
 
 func _release(body: Node) -> void:
@@ -248,9 +272,20 @@ func _physics_process(delta: float) -> void:
 		# Direction of the channel at the ball's position (in global space).
 		var local := to_local(ball.global_position)
 		var off := curve.get_closest_offset(local)
-		# Safety: a riding ball that somehow strays far from the channel is
-		# released back to normal play instead of staying stuck "in" the ramp.
-		if local.distance_to(curve.sample_baked(off)) > channel_width * 1.6:
+		var length := curve.get_baked_length()
+		# Release when the ball passes an END moving outward (the real exit),
+		# or if it somehow strays out of the corridor.
+		if off < 14.0:
+			var inward := (to_global(curve.sample_baked(minf(24.0, length))) - to_global(curve.sample_baked(0.0))).normalized()
+			if ball.linear_velocity.dot(inward) < 0.0:
+				_release(ball)
+				continue
+		elif off > length - 14.0:
+			var outward := (to_global(curve.sample_baked(length)) - to_global(curve.sample_baked(maxf(length - 24.0, 0.0)))).normalized()
+			if ball.linear_velocity.dot(outward) > 0.0:
+				_release(ball)
+				continue
+		if local.distance_to(curve.sample_baked(off)) > channel_width * 1.5:
 			_release(ball)
 			continue
 		var ahead := curve.sample_baked(minf(off + 8.0, curve.get_baked_length()))
