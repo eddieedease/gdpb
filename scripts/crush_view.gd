@@ -27,6 +27,9 @@ const TABLE_SIZE := Vector2(1280, 2560)
 ## Height of the mid / top tiers above the playfield, in metres.
 @export var mid_height := 0.11
 @export var top_height := 0.21
+## Height of extruded 3D walls and flippers.
+@export var wall_height := 0.16
+@export var flipper_height := 0.14
 ## Drop shadows: each tier is drawn a second time on the table surface,
 ## darkened and offset. The offset direction follows the CAMERA each frame
 ## (shadows fall toward the viewer), so the perspective reads correctly as
@@ -54,6 +57,7 @@ var _last_ball := Vector2(1120, 2360)   # start aimed at the plunger
 var _punch := 0.0
 var _shadows: Array = []      # [MeshInstance3D, reach factor]
 var _ball_fx := {}            # ball instance_id -> {sphere, blob, blob_mat, lift}
+var _flippers: Array = []     # [flipper Node2D, MeshInstance3D]
 
 
 func _ready() -> void:
@@ -104,6 +108,8 @@ func _ready() -> void:
 	_add_screen(_vp_mid.get_texture(), mid_height, true)
 	_add_screen(_vp_top.get_texture(), top_height, true)
 
+	_build_wall_visuals(table)
+	_build_flipper_visuals()
 	_build_environment()
 	_build_cabinet()
 
@@ -306,6 +312,117 @@ func _table_to_world(p: Vector2) -> Vector3:
 	return Vector3((p.x - TABLE_SIZE.x * 0.5) / PX_PER_M, 0.0, (p.y - TABLE_SIZE.y * 0.5) / PX_PER_M)
 
 
+# ---------------------------------------------------------------- 3D walls
+## Extrude every Wall / CurvedWall polyline into a low solid 3D wall:
+## darker side faces + a bright top cap in the line's colour. The flat 2D
+## line is hidden.
+func _build_wall_visuals(table: Node2D) -> void:
+	for child in table.get_children():
+		if child is Line2D and child.get("wall_bounce") != null:
+			_extrude_wall(child, child)
+		elif child is Path2D and child.get("wall_bounce") != null:
+			var line: Line2D = child.get_node_or_null("Line")
+			if line:
+				_extrude_wall(line, line)
+
+
+func _extrude_wall(line: Line2D, space_ref: Node2D) -> void:
+	var pts := line.points
+	var n := pts.size()
+	if n < 2:
+		return
+	var c := line.default_color
+	var side := Color(c.r * 0.45, c.g * 0.45, c.b * 0.45)
+	var w3: Array[Vector3] = []
+	var perp: Array[Vector3] = []
+	for i in n:
+		w3.append(_table_to_world(space_ref.to_global(pts[i])))
+		var p_prev := pts[maxi(i - 1, 0)]
+		var p_next := pts[mini(i + 1, n - 1)]
+		var tang := (p_next - p_prev).normalized()
+		perp.append(Vector3(-tang.y, 0.0, tang.x) * 0.032)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in n - 1:
+		var ai := w3[i] + perp[i]
+		var ao := w3[i] - perp[i]
+		var bi := w3[i + 1] + perp[i + 1]
+		var bo := w3[i + 1] - perp[i + 1]
+		var h := Vector3(0, wall_height, 0)
+		_quad(st, ai, bi, bi + h, ai + h, side)          # inner face
+		_quad(st, ao + h, bo + h, bo, ao, side)          # outer face
+		_quad(st, ai + h, bi + h, bo + h, ao + h, c)     # top cap
+	var mesh := MeshInstance3D.new()
+	mesh.mesh = st.commit()
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.vertex_color_use_as_albedo = true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.material_override = mat
+	add_child(mesh)
+	line.visible = false
+
+
+func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c2: Vector3, d: Vector3, col: Color) -> void:
+	st.set_color(col)
+	st.add_vertex(a)
+	st.set_color(col)
+	st.add_vertex(b)
+	st.set_color(col)
+	st.add_vertex(c2)
+	st.set_color(col)
+	st.add_vertex(a)
+	st.set_color(col)
+	st.add_vertex(c2)
+	st.set_color(col)
+	st.add_vertex(d)
+
+
+# ---------------------------------------------------------------- 3D flippers
+## Extrude each flipper's traced collision polygon into a solid paddle prism,
+## driven every frame by the 2D flipper's position/rotation.
+func _build_flipper_visuals() -> void:
+	for f in _vp_mid.get_children():
+		if not (f is Node2D) or not f.name.contains("Flipper"):
+			continue
+		var poly_node: CollisionPolygon2D = f.get_node_or_null("CollisionPolygon2D")
+		if poly_node == null:
+			continue
+		var spr: CanvasItem = f.get_node_or_null("Sprite2D")
+		if spr:
+			spr.visible = false
+		var pts := poly_node.polygon
+		var scaled := PackedVector2Array()
+		for p in pts:
+			scaled.append(p * f.scale)
+		var top := Color(0.5, 0.68, 1.0)
+		var side := Color(0.2, 0.3, 0.55)
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var idx := Geometry2D.triangulate_polygon(scaled)
+		for i in idx:
+			var p := scaled[i]
+			st.set_color(top)
+			st.add_vertex(Vector3(p.x / PX_PER_M, flipper_height, p.y / PX_PER_M))
+		var m := scaled.size()
+		for i in m:
+			var a2 := scaled[i]
+			var b2 := scaled[(i + 1) % m]
+			var a3 := Vector3(a2.x / PX_PER_M, 0.01, a2.y / PX_PER_M)
+			var b3 := Vector3(b2.x / PX_PER_M, 0.01, b2.y / PX_PER_M)
+			var h := Vector3(0, flipper_height, 0)
+			_quad(st, a3, b3, b3 + h, a3 + h, side)
+		var mesh := MeshInstance3D.new()
+		mesh.mesh = st.commit()
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.vertex_color_use_as_albedo = true
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mesh.material_override = mat
+		add_child(mesh)
+		_flippers.append([f, mesh])
+
+
 # ---------------------------------------------------------------- 3D ball
 const BALL_R := 0.14   # 14px 2D ball radius
 
@@ -389,6 +506,16 @@ func _process(delta: float) -> void:
 		m.position.x = shadow_dir.x * shadow_reach * f
 		m.position.z = shadow_dir.y * shadow_reach * f
 	_update_balls(delta, shadow_dir)
+
+	# 3D flipper paddles mirror their 2D physics flippers.
+	for entry in _flippers:
+		var f: Node2D = entry[0]
+		var m: MeshInstance3D = entry[1]
+		if not is_instance_valid(f):
+			continue
+		var w := _table_to_world(f.global_position)
+		m.position = Vector3(w.x, 0.0, w.z)
+		m.rotation.y = -f.rotation
 
 	var b := _table_to_world(_last_ball)
 	b.x *= side_follow
