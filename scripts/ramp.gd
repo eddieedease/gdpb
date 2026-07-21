@@ -8,7 +8,18 @@ extends Path2D
 ## each end flips the ball onto (or off of) that layer, so a normal ball passes
 ## under the ramp until it enters a mouth, then is guided along it.
 
-const RAMP_BIT := 1 << 3  # physics layer 4, reserved for ramps
+## Physics layers 4-8 (bits 3-7) are reserved for ramps/rails. Each channel
+## instance claims its OWN bit (cycling through this pool) rather than sharing
+## one - two channels whose curves happen to run near each other in world
+## space would otherwise physically collide (a riding ball on channel A
+## slamming into channel B's walls), which silently drains its momentum and
+## can strand or misdirect it. Only matters if more than RAMP_BIT_COUNT
+## channels overlap at once, which the current table never does.
+const RAMP_BIT_BASE := 3
+const RAMP_BIT_COUNT := 5
+static var _next_bit_index := 0
+
+var _bit := 0
 
 ## Keep this snug: ball diameter is 28, so ~38 reads as the ball filling the
 ## channel (the lock steering means it doesn't need physical slop).
@@ -30,6 +41,13 @@ const RAMP_BIT := 1 << 3  # physics layer 4, reserved for ramps
 ## Points awarded once each time a ball boards the ramp (0 = no scoring).
 @export var ramp_score := 2000
 
+## If > 0, ignore whatever curve is assigned in the editor and build a
+## perfectly straight local-space line of this length (pointing "up", i.e.
+## -Y) instead - a plain, undistorted lift from one level to another. Aim it
+## with the node's own rotation. This sidesteps hand-authoring Curve2D point
+## data, which is fragile to get right by hand.
+@export var straight_length := 0.0
+
 ## The "sucked in" feel: while captured, the ball is steered along the curve
 ## (speed preserved), pulled gently to the centreline, and gravity inside the
 ## channel is reduced so momentum carries it through climbs.
@@ -48,6 +66,13 @@ var _last_whoosh_ms := 0
 
 
 func _ready() -> void:
+	_bit = 1 << (RAMP_BIT_BASE + (_next_bit_index % RAMP_BIT_COUNT))
+	_next_bit_index += 1
+	if straight_length > 0.0:
+		var c := Curve2D.new()
+		c.add_point(Vector2.ZERO, Vector2.ZERO, Vector2.ZERO)
+		c.add_point(Vector2(0, -straight_length), Vector2.ZERO, Vector2.ZERO)
+		curve = c
 	_connect_curve()
 	_refresh()
 	if not Engine.is_editor_hint():
@@ -132,7 +157,7 @@ func _build_wall(pts: PackedVector2Array) -> void:
 	if pts.size() < 2:
 		return
 	var body := StaticBody2D.new()
-	body.collision_layer = RAMP_BIT   # only balls that are "on the ramp" hit these
+	body.collision_layer = _bit   # only a ball riding THIS channel hits these
 	body.collision_mask = 0
 	var mat := PhysicsMaterial.new()
 	mat.friction = 0.05
@@ -165,9 +190,9 @@ func _build_field() -> void:
 		poly.append(right[i])
 	var area := Area2D.new()
 	area.name = "Field"
-	# Only balls already RIDING the channel (RAMP_BIT): a playfield ball
+	# Only a ball already riding THIS channel (its own bit): a playfield ball
 	# crossing under the channel is neither captured nor affected by it.
-	area.collision_mask = RAMP_BIT
+	area.collision_mask = _bit
 	# Reduced gravity inside the channel (wins over the table's gravity zone)
 	# so the riding ball keeps its momentum through climbs.
 	area.gravity_space_override = Area2D.SPACE_OVERRIDE_REPLACE
@@ -218,8 +243,8 @@ func _on_mouth_entered(body: Node, inward: Vector2) -> void:
 		return
 	# board the ramp -> ride over the playfield (but keep colliding with the
 	# ramp walls so it stays guided)
-	body.collision_layer = RAMP_BIT
-	body.collision_mask = RAMP_BIT
+	body.collision_layer = _bit
+	body.collision_mask = _bit
 	body.z_index = 10
 	body.set_meta("on_ramp", true)
 	body.set_meta("channel", self)   # lets the 3D view follow this channel's height profile
@@ -239,6 +264,11 @@ func _on_mouth_entered(body: Node, inward: Vector2) -> void:
 func _on_field_exited(body: Node) -> void:
 	if not body.is_in_group("ball") or not body.get_meta("on_ramp", false):
 		return
+	# Belt-and-suspenders: each channel now has its own physics bit, so this
+	# shouldn't fire for a foreign ball, but only this ball's own channel may
+	# ever release it.
+	if body.get_meta("channel", null) != self:
+		return
 	# The field polygon can pinch on tight bends, so leaving it does not by
 	# itself mean the ball left the channel. Only release if the ball is
 	# genuinely outside the corridor or past an end; otherwise keep the lock
@@ -251,6 +281,9 @@ func _on_field_exited(body: Node) -> void:
 
 
 func _release(body: Node) -> void:
+	if not is_instance_valid(body):
+		_riding.erase(body)
+		return
 	if not body.get_meta("on_ramp", false):
 		return
 	body.collision_layer = 1
@@ -275,6 +308,20 @@ func _physics_process(delta: float) -> void:
 		var local := to_local(ball.global_position)
 		var off := curve.get_closest_offset(local)
 		var length := curve.get_baked_length()
+		# Unconditional safety net: once the ball has genuinely reached the
+		# FAR end, release it NO MATTER what its velocity is doing. A fast
+		# ball on a short channel can cross the whole "near end" window in a
+		# single physics step and never satisfy the velocity-direction check
+		# below, leaving it stuck "on_ramp" (collision effectively disabled)
+		# until it drifts far enough to trip the stray-distance fallback -
+		# which is what "ball glitches through solid things" looks like. This
+		# does NOT apply near the start, since that's also where the ball
+		# sits right after boarding (off ~= 0) - releasing unconditionally
+		# there would eject it before it ever rides anywhere.
+		var end_margin := minf(4.0, length * 0.1)
+		if off >= length - end_margin:
+			_release(ball)
+			continue
 		# Release when the ball passes an END moving outward (the real exit),
 		# or if it somehow strays out of the corridor.
 		if off < 14.0:

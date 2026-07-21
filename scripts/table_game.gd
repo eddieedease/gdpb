@@ -75,8 +75,13 @@ func _spawn_ball() -> void:
 
 
 func _get_ball() -> RigidBody2D:
-	var balls := get_tree().get_nodes_in_group("ball")
-	return balls[0] if not balls.is_empty() else null
+	# get_nodes_in_group() can transiently include a queue_free()'d node until
+	# the deferred deletion actually happens - skip any that are already gone
+	# rather than handing back a stale reference callers would assign into.
+	for b in get_tree().get_nodes_in_group("ball"):
+		if is_instance_valid(b):
+			return b
+	return null
 
 
 func _physics_process(delta: float) -> void:

@@ -17,6 +17,7 @@ func _ready() -> void:
 
 	_add_joypad_ui_nav()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	SoundManager.play_menu_music()
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
 	var bg := ColorRect.new()

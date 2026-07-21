@@ -16,8 +16,19 @@ const SFX := {
 
 const POOL_SIZE := 4
 
+## Menu: a single track on repeat. In-game: cycles through all three,
+## looping the whole playlist.
+const MENU_TRACK := preload("res://assets/sounds/bgm1.mp3")
+const GAME_PLAYLIST: Array[AudioStream] = [
+	preload("res://assets/sounds/bgm0.mp3"),
+	preload("res://assets/sounds/bgm2.mp3"),
+	preload("res://assets/sounds/bgm3.mp3"),
+]
+
 var _pools := {}
 var _pool_index := {}
+var _playlist: Array[AudioStream] = [MENU_TRACK]
+var _playlist_index := 0
 
 @onready var _music: AudioStreamPlayer = $Music
 
@@ -36,9 +47,31 @@ func _ready() -> void:
 
 	GameManager.game_over.connect(func(): play("game_over"))
 
-	if _music.stream:
-		_music.finished.connect(_music.play)
-		_music.play()
+	_music.finished.connect(_advance_music)
+	play_menu_music()
+
+
+## Menu / table-select screen: bgm1 on repeat.
+func play_menu_music() -> void:
+	_set_playlist([MENU_TRACK])
+
+
+## In-game: bgm0/bgm2/bgm3 cycling in a loop.
+func play_game_music() -> void:
+	_set_playlist(GAME_PLAYLIST)
+
+
+func _set_playlist(list: Array[AudioStream]) -> void:
+	_playlist = list
+	_playlist_index = 0
+	_music.stream = _playlist[0]
+	_music.play()
+
+
+func _advance_music() -> void:
+	_playlist_index = (_playlist_index + 1) % _playlist.size()
+	_music.stream = _playlist[_playlist_index]
+	_music.play()
 
 
 ## Play an sfx by name, optionally with slight pitch/volume variance for feel.

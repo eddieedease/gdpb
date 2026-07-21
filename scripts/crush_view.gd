@@ -136,6 +136,7 @@ func _ready() -> void:
 	GameManager.impact.connect(_on_impact)
 	GameManager.points_scored.connect(_on_points_scored)
 	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
+	SoundManager.play_game_music()
 
 
 ## Yellow "+N" popup rising from the piece that scored.
@@ -168,17 +169,37 @@ func _make_tier_viewport() -> SubViewport:
 
 
 ## A channel's peak height scales with its length: short ramps stay low,
-## long ones rise to the full top tier.
+## long ones rise to the full top tier - EXCEPT a channel whose name marks it
+## as feeding the upper deck ("ToDeck"), which rises all the way to
+## deck_height so its exit lands the ball smoothly at the deck's own
+## elevation instead of popping up an extra step.
 func _channel_peak(ramp: Node2D) -> float:
 	if ramp.get("curve") == null:
 		return top_height
-	return top_height * clampf(ramp.curve.get_baked_length() / 800.0, 0.35, 1.0)
+	# A dedicated deck-feed channel always reaches the deck's own height,
+	# however long or short it is - it's not "how much pop should this piece
+	# have" (that's what the length scaling below is for), it's "arrive at
+	# this specific existing platform".
+	if ramp.name.contains("ToDeck"):
+		return deck_height
+	# get_baked_length() is purely local to the curve resource - it knows
+	# nothing about the node's own scale, so a scaled-up instance (e.g. one
+	# stretching a small default curve to span a long distance) was always
+	# being measured as if unscaled. Multiply by scale to get the true
+	# world-space length.
+	var length: float = ramp.curve.get_baked_length() * ramp.scale.x
+	return top_height * clampf(length / 800.0, 0.35, 1.0)
 
 
-## Height of a channel at parameter t (0..1): smoothstep rise over the first
-## and last 30%, flat along the middle. Shared by the rail ribbons, the
+## Height of a channel at parameter t (0..1). Shared by the rail ribbons, the
 ## support rings AND the riding ball, so they always agree.
 func _channel_h(ramp: Node2D, t: float) -> float:
+	if ramp.name.contains("ToDeck"):
+		# One-way lift: rise smoothly then STAY at the deck's height for a
+		# seamless handoff - a ramp that arcs back down to the playfield
+		# would dump the ball partway back down right as it reaches the deck.
+		var k := clampf(t / 0.6, 0.0, 1.0)
+		return _channel_peak(ramp) * k * k * (3.0 - 2.0 * k)
 	var k := clampf(minf(t, 1.0 - t) / 0.3, 0.0, 1.0)
 	return _channel_peak(ramp) * k * k * (3.0 - 2.0 * k)
 
@@ -190,6 +211,22 @@ func _channel_h(ramp: Node2D, t: float) -> float:
 const TUBE_R := 0.165          # wire ring radius: ball (0.14) + clearance
 const WIRE_HALF := 0.008       # wire thickness
 const WIRE_ANGLES := [-90.0, -45.0, -135.0, 0.0, 180.0]  # bottom, diagonals, sides
+
+## Sample a curve at evenly spaced points along its length. Curve2D.tessellate()
+## is adaptive - a long but nearly-straight stretch can collapse to just its
+## raw control points (as few as 2-3 for a whole 800px channel), which is too
+## sparse for the funnel/ring placement math below and was producing
+## degenerate (zero-length-interval / non-finite) geometry. Fixed spacing
+## guarantees a sane minimum point count regardless of curve shape.
+func _sample_curve_even(curve: Curve2D, min_points: int = 40) -> PackedVector2Array:
+	var length := curve.get_baked_length()
+	var n := maxi(min_points, int(length / 20.0))
+	var pts := PackedVector2Array()
+	for i in n + 1:
+		var t := float(i) / float(n)
+		pts.append(curve.sample_baked(t * length))
+	return pts
+
 
 func _build_ramp_rails(ramp: Node2D) -> void:
 	# Handle ramps nested inside other ramps too.
@@ -205,7 +242,7 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 		right_line.visible = false
 	var col: Color = left_line.default_color
 
-	var cpts: PackedVector2Array = ramp.curve.tessellate(6, 3.0)
+	var cpts: PackedVector2Array = _sample_curve_even(ramp.curve)
 	var n := cpts.size()
 	if n < 2:
 		return
@@ -314,7 +351,7 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 ## `points`, so their extent comes from those points in global space, not
 ## from the node's own position - everything else uses global_position.
 func _compute_deck_rect() -> void:
-	var pad := 170.0
+	var pad := 90.0
 	var min_p := Vector2(INF, INF)
 	var max_p := Vector2(-INF, -INF)
 	var found := false
