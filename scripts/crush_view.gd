@@ -27,6 +27,9 @@ const TABLE_SIZE := Vector2(1280, 2560)
 ## Height of the mid / top tiers above the playfield, in metres.
 @export var mid_height := 0.11
 @export var top_height := 0.21
+## Upper deck: a genuinely raised sub-playfield (its own flipper bank etc,
+## node names starting with "Deck") rendered well above the top tier.
+@export var deck_height := 0.5
 ## Height of extruded 3D walls and flippers.
 @export var wall_height := 0.16
 @export var flipper_height := 0.14
@@ -53,11 +56,12 @@ const TABLE_SIZE := Vector2(1280, 2560)
 
 var _vp_mid: SubViewport
 var _vp_top: SubViewport
+var _vp_deck: SubViewport
 var _last_ball := Vector2(1120, 2360)   # start aimed at the plunger
 var _punch := 0.0
 var _shadows: Array = []      # [MeshInstance3D, reach factor]
 var _ball_fx := {}            # ball instance_id -> {sphere, blob, blob_mat, lift}
-var _flippers: Array = []     # [flipper Node2D, MeshInstance3D]
+var _flippers: Array = []     # [flipper Node2D, MeshInstance3D, base_height]
 
 
 func _ready() -> void:
@@ -86,10 +90,16 @@ func _ready() -> void:
 	# --- elevation tiers ---
 	_vp_mid = _make_tier_viewport()
 	_vp_top = _make_tier_viewport()
+	_vp_deck = _make_tier_viewport()
 	var space: RID = _vp.find_world_2d().space
 	for child in table.get_children().duplicate():
 		var n: String = child.name
-		if n.contains("Ramp") or n.contains("Rail"):
+		if n.begins_with("Deck"):
+			# Upper-deck pieces (its own flipper bank, targets, ...) get their
+			# own much-higher tier - a genuinely separate raised platform.
+			child.reparent(_vp_deck)
+			_rehome_physics(child, space)
+		elif n.contains("Ramp") or n.contains("Rail"):
 			# Ramps AND rails are elevated channels drawn as sloped 3D rails
 			# (board level at the mouths, rising to top_height). Physics stays
 			# 2D and untouched; only the flat art is replaced.
@@ -105,8 +115,10 @@ func _ready() -> void:
 	_add_screen(_vp.get_texture(), 0.0, false)
 	_add_shadow(_vp_mid.get_texture(), 0.012, 0.55)
 	_add_shadow(_vp_top.get_texture(), 0.024, 1.0)
+	_add_shadow(_vp_deck.get_texture(), 0.036, 1.8)
 	_add_screen(_vp_mid.get_texture(), mid_height, true)
 	_add_screen(_vp_top.get_texture(), top_height, true)
+	_add_screen(_vp_deck.get_texture(), deck_height, true)
 
 	_build_wall_visuals(table)
 	_build_flipper_visuals()
@@ -533,47 +545,53 @@ func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c2: Vector3, d: Vector3, col
 
 # ---------------------------------------------------------------- 3D flippers
 ## Extrude each flipper's traced collision polygon into a solid paddle prism,
-## driven every frame by the 2D flipper's position/rotation.
+## driven every frame by the 2D flipper's position/rotation. Flippers can live
+## on any tier (mid, or the upper deck); base_height positions that tier's
+## flippers at the right elevation, and the mesh itself is built at LOCAL
+## height 0..flipper_height (base_height is applied via node position only).
 func _build_flipper_visuals() -> void:
-	for f in _vp_mid.get_children():
-		if not (f is Node2D) or not f.name.contains("Flipper"):
-			continue
-		var poly_node: CollisionPolygon2D = f.get_node_or_null("CollisionPolygon2D")
-		if poly_node == null:
-			continue
-		var spr: CanvasItem = f.get_node_or_null("Sprite2D")
-		if spr:
-			spr.visible = false
-		var pts := poly_node.polygon
-		var scaled := PackedVector2Array()
-		for p in pts:
-			scaled.append(p * f.scale)
-		var top := Color(0.5, 0.68, 1.0)
-		var side := Color(0.2, 0.3, 0.55)
-		var st := SurfaceTool.new()
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		var idx := Geometry2D.triangulate_polygon(scaled)
-		for i in idx:
-			var p := scaled[i]
-			st.set_color(top)
-			st.add_vertex(Vector3(p.x / PX_PER_M, flipper_height, p.y / PX_PER_M))
-		var m := scaled.size()
-		for i in m:
-			var a2 := scaled[i]
-			var b2 := scaled[(i + 1) % m]
-			var a3 := Vector3(a2.x / PX_PER_M, 0.01, a2.y / PX_PER_M)
-			var b3 := Vector3(b2.x / PX_PER_M, 0.01, b2.y / PX_PER_M)
-			var h := Vector3(0, flipper_height, 0)
-			_quad(st, a3, b3, b3 + h, a3 + h, side)
-		var mesh := MeshInstance3D.new()
-		mesh.mesh = st.commit()
-		var mat := StandardMaterial3D.new()
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.vertex_color_use_as_albedo = true
-		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-		mesh.material_override = mat
-		add_child(mesh)
-		_flippers.append([f, mesh])
+	for tier in [[_vp_mid, 0.0], [_vp_deck, deck_height]]:
+		var vp: SubViewport = tier[0]
+		var base_h: float = tier[1]
+		for f in vp.get_children():
+			if not (f is Node2D) or not f.name.contains("Flipper"):
+				continue
+			var poly_node: CollisionPolygon2D = f.get_node_or_null("CollisionPolygon2D")
+			if poly_node == null:
+				continue
+			var spr: CanvasItem = f.get_node_or_null("Sprite2D")
+			if spr:
+				spr.visible = false
+			var pts := poly_node.polygon
+			var scaled := PackedVector2Array()
+			for p in pts:
+				scaled.append(p * f.scale)
+			var top := Color(0.5, 0.68, 1.0)
+			var side := Color(0.2, 0.3, 0.55)
+			var st := SurfaceTool.new()
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			var idx := Geometry2D.triangulate_polygon(scaled)
+			for i in idx:
+				var p := scaled[i]
+				st.set_color(top)
+				st.add_vertex(Vector3(p.x / PX_PER_M, flipper_height, p.y / PX_PER_M))
+			var m := scaled.size()
+			for i in m:
+				var a2 := scaled[i]
+				var b2 := scaled[(i + 1) % m]
+				var a3 := Vector3(a2.x / PX_PER_M, 0.01, a2.y / PX_PER_M)
+				var b3 := Vector3(b2.x / PX_PER_M, 0.01, b2.y / PX_PER_M)
+				var h := Vector3(0, flipper_height, 0)
+				_quad(st, a3, b3, b3 + h, a3 + h, side)
+			var mesh := MeshInstance3D.new()
+			mesh.mesh = st.commit()
+			var mat := StandardMaterial3D.new()
+			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			mat.vertex_color_use_as_albedo = true
+			mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+			mesh.material_override = mat
+			add_child(mesh)
+			_flippers.append([f, mesh, base_h])
 
 
 # ---------------------------------------------------------------- 3D ball
@@ -674,14 +692,15 @@ func _process(delta: float) -> void:
 		m.position.z = shadow_dir.y * shadow_reach * f
 	_update_balls(delta, shadow_dir)
 
-	# 3D flipper paddles mirror their 2D physics flippers.
+	# 3D flipper paddles mirror their 2D physics flippers, at their tier's height.
 	for entry in _flippers:
 		var f: Node2D = entry[0]
 		var m: MeshInstance3D = entry[1]
+		var base_h: float = entry[2]
 		if not is_instance_valid(f):
 			continue
 		var w := _table_to_world(f.global_position)
-		m.position = Vector3(w.x, 0.0, w.z)
+		m.position = Vector3(w.x, base_h, w.z)
 		m.rotation.y = -f.rotation
 
 	var b := _table_to_world(_last_ball)
