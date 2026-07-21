@@ -276,3 +276,9 @@ position = Vector2(480, 610)
 
 [node name="DeckFlipperRight" parent="." instance=ExtResource("14_3tj61")]
 position = Vector2(800, 610)
+
+[node name="DeckWallLeft" parent="." instance=ExtResource("5_6qs8c")]
+points = PackedVector2Array(320, 565, 620, 618)
+
+[node name="DeckWallRight" parent="." instance=ExtResource("5_6qs8c")]
+points = PackedVector2Array(960, 565, 660, 618)

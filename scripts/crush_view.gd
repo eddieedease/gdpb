@@ -62,6 +62,10 @@ var _punch := 0.0
 var _shadows: Array = []      # [MeshInstance3D, reach factor]
 var _ball_fx := {}            # ball instance_id -> {sphere, blob, blob_mat, lift}
 var _flippers: Array = []     # [flipper Node2D, MeshInstance3D, base_height]
+## Table-space footprint of the upper deck (padded bounding box of its
+## content). Any ball whose 2D position falls inside this rect is visually
+## lifted to deck_height - this is what makes the ball "climb onto" the deck.
+var _deck_rect := Rect2()
 
 
 func _ready() -> void:
@@ -120,8 +124,10 @@ func _ready() -> void:
 	_add_screen(_vp_top.get_texture(), top_height, true)
 	_add_screen(_vp_deck.get_texture(), deck_height, true)
 
+	_compute_deck_rect()
 	_build_wall_visuals(table)
 	_build_flipper_visuals()
+	_build_deck_platform()
 	_build_environment()
 	_build_cabinet()
 
@@ -303,6 +309,104 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 			add_child(post)
 
 
+## Table-space bounding box (padded) of whatever ended up on the deck tier.
+## Walls (Line2D) sit at local origin (0,0) and hold their real shape in
+## `points`, so their extent comes from those points in global space, not
+## from the node's own position - everything else uses global_position.
+func _compute_deck_rect() -> void:
+	var pad := 170.0
+	var min_p := Vector2(INF, INF)
+	var max_p := Vector2(-INF, -INF)
+	var found := false
+	for c in _vp_deck.get_children():
+		if c is Line2D:
+			for p in c.points:
+				var gp: Vector2 = c.to_global(p)
+				found = true
+				min_p = min_p.min(gp)
+				max_p = max_p.max(gp)
+		elif c is Node2D:
+			found = true
+			min_p = min_p.min(c.global_position)
+			max_p = max_p.max(c.global_position)
+	if not found:
+		return
+	min_p -= Vector2(pad, pad)
+	max_p += Vector2(pad, pad)
+	_deck_rect = Rect2(min_p, max_p - min_p)
+
+
+## A solid floor plate + neon trim + four corner support legs under the deck
+## content, so it reads as an actual raised structure rather than parts
+## floating in mid-air.
+func _build_deck_platform() -> void:
+	if _deck_rect.size.x <= 0.0:
+		return
+	var min_p := _deck_rect.position
+	var max_p := _deck_rect.position + _deck_rect.size
+	var center := _deck_rect.get_center()
+	var wc := _table_to_world(center)
+	var size_w := _deck_rect.size / PX_PER_M
+	var plate_top := deck_height - 0.02
+	# Thick enough that its side faces read clearly at the game's shallow
+	# camera angle (a paper-thin slab all but vanishes edge-on), but its
+	# underside stays comfortably above top_height so it can't occlude the
+	# top-tier bumpers/targets that may sit within the same XY footprint.
+	var plate_thickness := 0.14
+	var plate_bottom := plate_top - plate_thickness
+
+	var mesh := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(size_w.x, plate_thickness, size_w.y)
+	mesh.mesh = box
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.18, 0.2, 0.3)
+	mat.roughness = 0.55
+	mesh.material_override = mat
+	mesh.position = Vector3(wc.x, (plate_top + plate_bottom) * 0.5, wc.z)
+	add_child(mesh)
+
+	# Neon border: 4 thin strips tracing the platform's top edge, leaving its
+	# dark centre visible underfoot (a full-footprint glow reads as a single
+	# solid slab of colour, not a highlighted platform edge).
+	var rim := 0.05
+	var strips := [
+		[Vector2(0, size_w.y * 0.5), Vector2(size_w.x + rim, rim)],
+		[Vector2(0, -size_w.y * 0.5), Vector2(size_w.x + rim, rim)],
+		[Vector2(size_w.x * 0.5, 0), Vector2(rim, size_w.y + rim)],
+		[Vector2(-size_w.x * 0.5, 0), Vector2(rim, size_w.y + rim)],
+	]
+	for s in strips:
+		var off: Vector2 = s[0]
+		var sz: Vector2 = s[1]
+		var strip := MeshInstance3D.new()
+		var sb := BoxMesh.new()
+		sb.size = Vector3(sz.x, 0.03, sz.y)
+		strip.mesh = sb
+		var tmat := StandardMaterial3D.new()
+		tmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		tmat.albedo_color = Color(0.85, 0.5, 1.0)
+		tmat.emission_enabled = true
+		tmat.emission = Color(0.85, 0.5, 1.0)
+		tmat.emission_energy_multiplier = 1.6
+		strip.material_override = tmat
+		strip.position = Vector3(wc.x + off.x, plate_top, wc.z + off.y)
+		add_child(strip)
+
+	for corner in [Vector2(min_p.x, min_p.y), Vector2(max_p.x, min_p.y),
+			Vector2(min_p.x, max_p.y), Vector2(max_p.x, max_p.y)]:
+		var cw := _table_to_world(corner)
+		var leg := MeshInstance3D.new()
+		var lb := BoxMesh.new()
+		lb.size = Vector3(0.06, plate_bottom, 0.06)
+		leg.mesh = lb
+		var lmat := StandardMaterial3D.new()
+		lmat.albedo_color = Color(0.25, 0.27, 0.36)
+		leg.material_override = lmat
+		leg.position = Vector3(cw.x, plate_bottom * 0.5, cw.z)
+		add_child(leg)
+
+
 ## Move every physics body/area under `node` into the table's physics space so
 ## pieces rendered in a tier viewport still collide with the ball.
 func _rehome_physics(node: Node, space: RID) -> void:
@@ -482,16 +586,21 @@ func _table_to_world(p: Vector2) -> Vector3:
 ## darker side faces + a bright top cap in the line's colour. The flat 2D
 ## line is hidden.
 func _build_wall_visuals(table: Node2D) -> void:
-	for child in table.get_children():
-		if child is Line2D and child.get("wall_bounce") != null:
-			_extrude_wall(child, child)
-		elif child is Path2D and child.get("wall_bounce") != null:
-			var line: Line2D = child.get_node_or_null("Line")
-			if line:
-				_extrude_wall(line, line)
+	# Deck-tier walls (name "Deck*", already reparented into _vp_deck by the
+	# time this runs) extrude starting at deck_height instead of the ground.
+	for tier in [[table, 0.0], [_vp_deck, deck_height]]:
+		var parent: Node = tier[0]
+		var base_h: float = tier[1]
+		for child in parent.get_children():
+			if child is Line2D and child.get("wall_bounce") != null:
+				_extrude_wall(child, child, base_h)
+			elif child is Path2D and child.get("wall_bounce") != null:
+				var line: Line2D = child.get_node_or_null("Line")
+				if line:
+					_extrude_wall(line, line, base_h)
 
 
-func _extrude_wall(line: Line2D, space_ref: Node2D) -> void:
+func _extrude_wall(line: Line2D, space_ref: Node2D, base_h: float = 0.0) -> void:
 	var pts := line.points
 	var n := pts.size()
 	if n < 2:
@@ -501,7 +610,8 @@ func _extrude_wall(line: Line2D, space_ref: Node2D) -> void:
 	var w3: Array[Vector3] = []
 	var perp: Array[Vector3] = []
 	for i in n:
-		w3.append(_table_to_world(space_ref.to_global(pts[i])))
+		var w := _table_to_world(space_ref.to_global(pts[i]))
+		w3.append(w + Vector3(0, base_h, 0))
 		var p_prev := pts[maxi(i - 1, 0)]
 		var p_next := pts[mini(i + 1, n - 1)]
 		var tang := (p_next - p_prev).normalized()
@@ -651,6 +761,11 @@ func _update_balls(delta: float, shadow_dir: Vector2) -> void:
 				target_lift = _channel_h(chan, off / maxf(chan.curve.get_baked_length(), 1.0))
 			else:
 				target_lift = top_height
+		elif _deck_rect.size.x > 0.0 and _deck_rect.has_point(b.global_position):
+			# The ball visually climbs onto the upper deck while its 2D
+			# position is within the deck's footprint - without this the
+			# flippers float but the ball never appears to meet them.
+			target_lift = deck_height
 		var lift: float = lerpf(fx.lift, target_lift, 1.0 - exp(-16.0 * delta))
 		fx.lift = lift
 		var w := _table_to_world(b.global_position)
