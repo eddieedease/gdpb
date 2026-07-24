@@ -17,6 +17,15 @@ extends Node3D
 const PX_PER_M := 100.0          # 2D pixels -> 3D metres
 const TABLE_SIZE := Vector2(1280, 2560)
 
+## Physics layer 9: the upper deck, a genuinely separate level. Deck pieces
+## (its flippers, targets and cage walls) live on this layer ALONE, and a ball
+## is moved onto it only when a "ToDeck" channel delivers it up there. So a
+## playfield ball can never touch the deck just by rolling under its footprint
+## - the deck is reachable by the ramp and nothing else - and a ball up on the
+## deck can't touch the playfield below it. It leaves only by falling off the
+## deck's open bottom edge, past its flippers.
+const DECK_BIT := 1 << 8
+
 # Elevation tiers. Mid/top pieces are MOVED into their own SubViewports, which
 # render them on separate transparent planes (a viewport reliably renders only
 # its own children). Their physics bodies/areas are then re-homed into the
@@ -37,7 +46,14 @@ const TABLE_SIZE := Vector2(1280, 2560)
 ## darkened and offset. The offset direction follows the CAMERA each frame
 ## (shadows fall toward the viewer), so the perspective reads correctly as
 ## the camera moves.
-@export var shadow_reach := 0.13
+##
+## Keep this SMALL. A raised piece is drawn on a plane above the board, so the
+## perspective camera ALREADY displaces it from its true ground position -
+## that displacement is the depth cue. Adding a large shadow offset on top of
+## it pushes the shadow away a second time and the shadow visibly detaches
+## from the piece. Near-zero reach parks the shadow under the piece's actual
+## ground position and lets the parallax do the work.
+@export var shadow_reach := 0.04
 @export var shadow_opacity := 0.5
 
 ## Camera height above the table plane.
@@ -63,9 +79,13 @@ var _shadows: Array = []      # [MeshInstance3D, reach factor]
 var _ball_fx := {}            # ball instance_id -> {sphere, blob, blob_mat, lift}
 var _flippers: Array = []     # [flipper Node2D, MeshInstance3D, base_height]
 ## Table-space footprint of the upper deck (padded bounding box of its
-## content). Any ball whose 2D position falls inside this rect is visually
-## lifted to deck_height - this is what makes the ball "climb onto" the deck.
+## content). Defines where the cage walls go and how far a ball must fall
+## past the deck flippers before it rejoins the playfield below.
 var _deck_rect := Rect2()
+## The deck's outline in table space, straight from the DeckBounds polygon
+## (empty if that node is missing). The cage walls trace this exactly, so the
+## shape drawn in the editor is the shape the ball is contained by.
+var _deck_poly := PackedVector2Array()
 
 
 func _ready() -> void:
@@ -74,12 +94,22 @@ func _ready() -> void:
 	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP_WIDTH
 	win.content_scale_size = Vector2i(1280, 720)
 
-	# Table surface colour (drawn behind the table inside the viewport).
+	# Bare table surface colour, behind everything - it only shows where the
+	# playfield artwork doesn't reach. This is an opaque full-table rect, so
+	# its z_index MUST stay below the art's (PlayfieldArt sits at -100):
+	# being merely first in tree order is not enough, since z_index wins over
+	# tree order and a z=0 rect would paint straight over a z=-100 sprite.
+	# That mismatch is invisible in the editor, where this node doesn't exist.
 	var surface := ColorRect.new()
 	surface.color = Color(0.16, 0.17, 0.22)
 	surface.size = TABLE_SIZE
+	surface.z_index = -1000
 	_vp.add_child(surface)
 	_vp.move_child(surface, 0)
+
+	# NOTE: the playfield artwork under the pieces is NOT built here - it is a
+	# real "PlayfieldArt" Sprite2D in the table scene, so it can be positioned
+	# and scaled against the actual walls in the 2D editor.
 
 	# The 3D camera replaces the table's own 2D camera and HUD (the HUD lives
 	# in this scene instead, drawn flat on the real screen).
@@ -100,9 +130,12 @@ func _ready() -> void:
 		var n: String = child.name
 		if n.begins_with("Deck"):
 			# Upper-deck pieces (its own flipper bank, targets, ...) get their
-			# own much-higher tier - a genuinely separate raised platform.
+			# own much-higher tier - a genuinely separate raised platform - and
+			# their own physics layer, so only a ball that has been delivered
+			# to the deck can interact with them.
 			child.reparent(_vp_deck)
 			_rehome_physics(child, space)
+			_set_deck_layer(child)
 		elif n.contains("Ramp") or n.contains("Rail"):
 			# Ramps AND rails are elevated channels drawn as sloped 3D rails
 			# (board level at the mouths, rising to top_height). Physics stays
@@ -110,6 +143,9 @@ func _ready() -> void:
 			child.reparent(_vp_top)
 			_rehome_physics(child, space)
 			_build_ramp_rails(child)
+			# A deck-feed channel hands its ball to the deck on a full ride.
+			if n.contains("ToDeck") and child.has_signal("ball_released"):
+				child.ball_released.connect(_on_deck_channel_released)
 		elif n.begins_with("Bumper") or n.begins_with("DropTarget"):
 			child.reparent(_vp_top)
 			_rehome_physics(child, space)
@@ -128,6 +164,7 @@ func _ready() -> void:
 	_build_wall_visuals(table)
 	_build_flipper_visuals()
 	_build_deck_platform()
+	_build_deck_cage(table)
 	_build_environment()
 	_build_cabinet()
 
@@ -259,8 +296,12 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 		var p_next := cpts[mini(i + 1, n - 1)]
 		var tg := (p_next - p_prev).normalized()
 		normals.append(Vector3(-tg.y, 0.0, tg.x))
-		var k := clampf(minf(t, 1.0 - t) / 0.08, 0.0, 1.0)
-		radii.append(TUBE_R * lerpf(2.1, 1.0, k * k * (3.0 - 2.0 * k)))
+		# Gentle funnel. A hard 2.1x flare made the five wires fan out into a
+		# splayed mess at each mouth (nothing ties them together out there),
+		# which read as the rail fraying rather than opening up. A modest
+		# flare plus a rim ring at the very end (below) gives a clean mouth.
+		var k := clampf(minf(t, 1.0 - t) / 0.10, 0.0, 1.0)
+		radii.append(TUBE_R * lerpf(1.45, 1.0, k * k * (3.0 - 2.0 * k)))
 
 	# --- the wires ---
 	var st := SurfaceTool.new()
@@ -307,9 +348,12 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 	add_child(smesh)
 	_shadows.append([smesh, 1.0])
 
-	# --- 'O' rings: at each funnel throat and every ~180px along the tube ---
+	# --- 'O' rings: a rim at each mouth, a throat ring just inside it, and
+	# one every ~180px along the tube. The t=0/t=1 rims are what stop the
+	# wires ending in mid-air; each ring is sized to the tube's local radius
+	# so the flared mouths get correspondingly larger rims.
 	var length: float = ramp.curve.get_baked_length()
-	var ring_ts: Array[float] = [0.08, 0.92]
+	var ring_ts: Array[float] = [0.0, 0.08, 0.92, 1.0]
 	var between := int(length * 0.84 / 180.0)
 	for r in range(1, between):
 		ring_ts.append(0.08 + 0.84 * float(r) / float(between))
@@ -320,10 +364,11 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 		var i1 := clampi(idx - 1, 0, n - 1)
 		var tang3 := centers[i2] - centers[i1]
 		var yaw := atan2(tang3.x, tang3.z)
+		var rr: float = radii[idx]
 		var ring := MeshInstance3D.new()
 		var torus := TorusMesh.new()
-		torus.inner_radius = TUBE_R - 0.006
-		torus.outer_radius = TUBE_R + 0.016
+		torus.inner_radius = rr - 0.006
+		torus.outer_radius = rr + 0.016
 		ring.mesh = torus
 		var rmat := StandardMaterial3D.new()
 		rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -346,30 +391,58 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 			add_child(post)
 
 
-## Table-space bounding box (padded) of whatever ended up on the deck tier.
-## Walls (Line2D) sit at local origin (0,0) and hold their real shape in
-## `points`, so their extent comes from those points in global space, not
-## from the node's own position - everything else uses global_position.
+## Table-space footprint of the upper deck: its floor plate, its cage walls
+## and the line a ball must fall past to leave it all come from this rect.
+##
+## Preferred source is an explicit "DeckBounds" Polygon2D inside deck.tscn -
+## a shape you can SEE and drag in the 2D editor, so the deck can be designed
+## against the rest of the table instead of being an invisible rectangle
+## inferred at runtime. Falls back to a padded bounding box of the deck's
+## contents if that node is missing.
 func _compute_deck_rect() -> void:
+	for c in _descendants(_vp_deck):
+		if c.name == "DeckBounds" and c is Polygon2D and c.polygon.size() >= 3:
+			var bmin := Vector2(INF, INF)
+			var bmax := Vector2(-INF, -INF)
+			_deck_poly = PackedVector2Array()
+			for p in c.polygon:
+				# The node's own transform counts - the shape can be moved and
+				# scaled in the editor like any other piece.
+				var gp: Vector2 = c.to_global(p)
+				_deck_poly.append(gp)
+				bmin = bmin.min(gp)
+				bmax = bmax.max(gp)
+			_deck_rect = Rect2(bmin, bmax - bmin)
+			return
+
 	var pad := 90.0
+	# Extra room along the BOTTOM edge: that edge is the deck's drain, so the
+	# deck flippers need a genuine catch area under them. With only the
+	# uniform padding the ball cleared the flipper line and dropped out in the
+	# same breath, leaving nothing to actually play.
+	var bottom_pad := 200.0
 	var min_p := Vector2(INF, INF)
 	var max_p := Vector2(-INF, -INF)
 	var found := false
-	for c in _vp_deck.get_children():
+	# Only real PIECES count toward the footprint - walls by their points,
+	# everything else by where its collider sits. Plain Node2D containers are
+	# skipped deliberately: the deck is an instanced sub-scene whose root sits
+	# at the origin, and counting that would stretch the rect to (0,0).
+	for c in _descendants(_vp_deck):
 		if c is Line2D:
 			for p in c.points:
 				var gp: Vector2 = c.to_global(p)
 				found = true
 				min_p = min_p.min(gp)
 				max_p = max_p.max(gp)
-		elif c is Node2D:
+		elif c is CollisionObject2D:
 			found = true
 			min_p = min_p.min(c.global_position)
 			max_p = max_p.max(c.global_position)
 	if not found:
 		return
 	min_p -= Vector2(pad, pad)
-	max_p += Vector2(pad, pad)
+	max_p += Vector2(pad, bottom_pad)
 	_deck_rect = Rect2(min_p, max_p - min_p)
 
 
@@ -442,6 +515,134 @@ func _build_deck_platform() -> void:
 		leg.material_override = lmat
 		leg.position = Vector3(cw.x, plate_bottom * 0.5, cw.z)
 		add_child(leg)
+
+
+## Every node under `root`, depth-first. Tier content may be a flat list of
+## pieces OR a single instanced sub-scene (the upper deck is its own scene, so
+## it can be moved/toggled as one unit), so discovery has to look deeper than
+## one level.
+func _descendants(root: Node) -> Array:
+	var out: Array = []
+	for c in root.get_children():
+		out.append(c)
+		out.append_array(_descendants(c))
+	return out
+
+
+## Put every collider under `node` on the deck's own physics layer, so it is
+## invisible to ordinary playfield balls and solid only to a ball that has
+## been delivered onto the deck.
+func _set_deck_layer(node: Node) -> void:
+	if node is CollisionObject2D:
+		node.collision_layer = DECK_BIT
+		node.collision_mask = DECK_BIT
+	for c in node.get_children():
+		_set_deck_layer(c)
+
+
+## The cage: solid walls tracing the deck's outline so a ball up there stays
+## up there and rattles around, exactly like a real second level. The wall
+## follows the DeckBounds polygon edge for edge, so an angled or many-sided
+## deck gets a matching cage rather than a box around it.
+##
+## The BOTTOM edge is deliberately left out - that gap, past the deck
+## flippers, is the only way back down to the playfield. "Bottom" means any
+## edge lying along the shape's lowest extent.
+func _build_deck_cage(table: Node2D) -> void:
+	if _deck_rect.size.x <= 0.0:
+		return
+	var outline := _deck_poly
+	if outline.size() < 3:
+		var min_p := _deck_rect.position
+		var max_p := _deck_rect.position + _deck_rect.size
+		outline = PackedVector2Array([
+			Vector2(min_p.x, min_p.y), Vector2(max_p.x, min_p.y),
+			Vector2(max_p.x, max_p.y), Vector2(min_p.x, max_p.y),
+		])
+	var floor_y := -INF
+	for p in outline:
+		floor_y = maxf(floor_y, p.y)
+	var corners := []
+	for i in outline.size():
+		var a: Vector2 = outline[i]
+		var b: Vector2 = outline[(i + 1) % outline.size()]
+		if absf(a.y - floor_y) < 1.0 and absf(b.y - floor_y) < 1.0:
+			continue   # the open bottom edge - the deck's drain
+		corners.append(a)
+		corners.append(b)
+	if corners.is_empty():
+		return
+	var body := StaticBody2D.new()
+	body.name = "DeckCage"
+	body.collision_layer = DECK_BIT
+	body.collision_mask = 0
+	var pm := PhysicsMaterial.new()
+	pm.friction = 0.05
+	pm.bounce = 0.4
+	body.physics_material_override = pm
+	var shape := ConcavePolygonShape2D.new()
+	shape.segments = PackedVector2Array(corners)
+	var cs := CollisionShape2D.new()
+	cs.shape = shape
+	body.add_child(cs)
+	table.add_child(body)
+
+	# 3D visual: a low glowing rail along those same three edges, sitting on
+	# the deck plate so the cage reads as a boundary rather than an invisible
+	# force field.
+	var h := 0.13
+	var base := deck_height - 0.02
+	for i in range(0, corners.size(), 2):
+		var a: Vector2 = corners[i]
+		var b: Vector2 = corners[i + 1]
+		var wa := _table_to_world(a)
+		var wb := _table_to_world(b)
+		var mid := (wa + wb) * 0.5
+		var span := Vector2(wb.x - wa.x, wb.z - wa.z)
+		var mesh := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(maxf(span.length(), 0.04), h, 0.05)
+		mesh.mesh = box
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.albedo_color = Color(0.55, 0.75, 1.0)
+		mat.emission_enabled = true
+		mat.emission = Color(0.4, 0.7, 1.0)
+		mat.emission_energy_multiplier = 1.3
+		mesh.material_override = mat
+		mesh.position = Vector3(mid.x, base + h * 0.5, mid.z)
+		mesh.rotation.y = -atan2(span.y, span.x)
+		add_child(mesh)
+
+
+## A channel named "*ToDeck*" finished a full ride: hand its ball to the deck.
+func _on_deck_channel_released(body: Node, rode_through: bool) -> void:
+	if not rode_through or not is_instance_valid(body):
+		return
+	body.collision_layer = DECK_BIT
+	body.collision_mask = DECK_BIT
+	body.z_index = 20
+	body.set_meta("on_deck", true)
+
+
+func _drop_from_deck(body: Node) -> void:
+	body.collision_layer = 1
+	body.collision_mask = 1
+	body.z_index = 0
+	body.set_meta("on_deck", false)
+
+
+func _physics_process(_delta: float) -> void:
+	# A ball leaves the deck by falling off its open bottom edge (past the
+	# deck flippers) - at which point it rejoins ordinary play below.
+	if _deck_rect.size.x <= 0.0:
+		return
+	var floor_y := _deck_rect.position.y + _deck_rect.size.y
+	for b in get_tree().get_nodes_in_group("ball"):
+		if not is_instance_valid(b) or not b.get_meta("on_deck", false):
+			continue
+		if b.global_position.y > floor_y:
+			_drop_from_deck(b)
 
 
 ## Move every physics body/area under `node` into the table's physics space so
@@ -628,7 +829,7 @@ func _build_wall_visuals(table: Node2D) -> void:
 	for tier in [[table, 0.0], [_vp_deck, deck_height]]:
 		var parent: Node = tier[0]
 		var base_h: float = tier[1]
-		for child in parent.get_children():
+		for child in _descendants(parent):
 			if child is Line2D and child.get("wall_bounce") != null:
 				_extrude_wall(child, child, base_h)
 			elif child is Path2D and child.get("wall_bounce") != null:
@@ -700,7 +901,7 @@ func _build_flipper_visuals() -> void:
 	for tier in [[_vp_mid, 0.0], [_vp_deck, deck_height]]:
 		var vp: SubViewport = tier[0]
 		var base_h: float = tier[1]
-		for f in vp.get_children():
+		for f in _descendants(vp):
 			if not (f is Node2D) or not f.name.contains("Flipper"):
 				continue
 			var poly_node: CollisionPolygon2D = f.get_node_or_null("CollisionPolygon2D")
@@ -798,10 +999,10 @@ func _update_balls(delta: float, shadow_dir: Vector2) -> void:
 				target_lift = _channel_h(chan, off / maxf(chan.curve.get_baked_length(), 1.0))
 			else:
 				target_lift = top_height
-		elif _deck_rect.size.x > 0.0 and _deck_rect.has_point(b.global_position):
-			# The ball visually climbs onto the upper deck while its 2D
-			# position is within the deck's footprint - without this the
-			# flippers float but the ball never appears to meet them.
+		elif b.get_meta("on_deck", false):
+			# Riding the upper deck. Keyed on the ball's actual deck state, NOT
+			# on whether it happens to be inside the deck's footprint - a
+			# playfield ball passing under the deck must stay firmly below it.
 			target_lift = deck_height
 		var lift: float = lerpf(fx.lift, target_lift, 1.0 - exp(-16.0 * delta))
 		fx.lift = lift

@@ -41,13 +41,6 @@ var _bit := 0
 ## Points awarded once each time a ball boards the ramp (0 = no scoring).
 @export var ramp_score := 2000
 
-## If > 0, ignore whatever curve is assigned in the editor and build a
-## perfectly straight local-space line of this length (pointing "up", i.e.
-## -Y) instead - a plain, undistorted lift from one level to another. Aim it
-## with the node's own rotation. This sidesteps hand-authoring Curve2D point
-## data, which is fragile to get right by hand.
-@export var straight_length := 0.0
-
 ## The "sucked in" feel: while captured, the ball is steered along the curve
 ## (speed preserved), pulled gently to the centreline, and gravity inside the
 ## channel is reduced so momentum carries it through climbs.
@@ -57,6 +50,22 @@ var _bit := 0
 ## Minimum capture speed for the whoosh sound - a slow dribble that rolls
 ## back out of the mouth stays silent.
 @export var whoosh_min_speed := 800.0
+
+## Boarding gates. A captured ball has its velocity snapped to the channel
+## axis (speed preserved), so a ball that merely FALLS past a mouth used to
+## get its downward momentum rotated along the rail and shot off up-table -
+## the rail appeared to kick it for no reason. Requiring both a real shot
+## speed and a heading roughly along the channel means only balls actually
+## aimed into the mouth board it; everything else falls past untouched.
+@export var min_board_speed := 450.0
+## dot(velocity.normalized(), inward) - 0.5 is a ~60 degree cone.
+@export_range(0.0, 1.0) var min_board_alignment := 0.5
+
+## Emitted when a ball leaves this channel. `rode_through` is true only if it
+## exited the END OPPOSITE the one it boarded at (a full traversal) rather
+## than backing out the way it came - a deck-feed channel only hands the ball
+## to the upper deck on a genuine ride.
+signal ball_released(body: Node, rode_through: bool)
 
 var _riding: Array[RigidBody2D] = []
 var _last_whoosh_ms := 0
@@ -68,11 +77,6 @@ var _last_whoosh_ms := 0
 func _ready() -> void:
 	_bit = 1 << (RAMP_BIT_BASE + (_next_bit_index % RAMP_BIT_COUNT))
 	_next_bit_index += 1
-	if straight_length > 0.0:
-		var c := Curve2D.new()
-		c.add_point(Vector2.ZERO, Vector2.ZERO, Vector2.ZERO)
-		c.add_point(Vector2(0, -straight_length), Vector2.ZERO, Vector2.ZERO)
-		curve = c
 	_connect_curve()
 	_refresh()
 	if not Engine.is_editor_hint():
@@ -237,9 +241,14 @@ func _on_mouth_entered(body: Node, inward: Vector2) -> void:
 		return
 	if not body is RigidBody2D:
 		return
-	# Must be moving into the channel - a ball rolling past or just released
-	# at the exit is ignored.
-	if body.linear_velocity.dot(inward) < 60.0:
+	# Must be genuinely shot INTO the channel: fast enough to carry through,
+	# and heading along it rather than just drifting or falling across the
+	# mouth (see min_board_speed / min_board_alignment).
+	var v: Vector2 = body.linear_velocity
+	var speed: float = v.length()
+	if speed < min_board_speed:
+		return
+	if v.normalized().dot(inward) < min_board_alignment:
 		return
 	# board the ramp -> ride over the playfield (but keep colliding with the
 	# ramp walls so it stays guided)
@@ -248,7 +257,9 @@ func _on_mouth_entered(body: Node, inward: Vector2) -> void:
 	body.z_index = 10
 	body.set_meta("on_ramp", true)
 	body.set_meta("channel", self)   # lets the 3D view follow this channel's height profile
-	var speed: float = body.linear_velocity.length()
+	# Where along the curve it got on, so the release checks can tell "reached
+	# the far end after a real ride" from "is sitting at the end it entered".
+	body.set_meta("channel_entry_off", curve.get_closest_offset(to_local(body.global_position)))
 	if not _riding.has(body):
 		_riding.append(body)
 	# Whoosh only on a committed shot (fast enough to carry through), with a
@@ -286,12 +297,19 @@ func _release(body: Node) -> void:
 		return
 	if not body.get_meta("on_ramp", false):
 		return
+	var length := curve.get_baked_length()
+	var off := curve.get_closest_offset(to_local(body.global_position))
+	var entry_off: float = body.get_meta("channel_entry_off", 0.0)
 	body.collision_layer = 1
 	body.collision_mask = 1
 	body.z_index = 0
 	body.set_meta("on_ramp", false)
 	body.set_meta("channel", null)
 	_riding.erase(body)
+	# Listeners (e.g. the upper deck taking delivery of the ball) decide what
+	# happens next, so this stays generic - a channel knows nothing about what
+	# is at either of its ends.
+	ball_released.emit(body, absf(off - entry_off) > length * 0.5)
 
 
 func _physics_process(delta: float) -> void:
@@ -308,18 +326,19 @@ func _physics_process(delta: float) -> void:
 		var local := to_local(ball.global_position)
 		var off := curve.get_closest_offset(local)
 		var length := curve.get_baked_length()
-		# Unconditional safety net: once the ball has genuinely reached the
-		# FAR end, release it NO MATTER what its velocity is doing. A fast
-		# ball on a short channel can cross the whole "near end" window in a
-		# single physics step and never satisfy the velocity-direction check
-		# below, leaving it stuck "on_ramp" (collision effectively disabled)
-		# until it drifts far enough to trip the stray-distance fallback -
-		# which is what "ball glitches through solid things" looks like. This
-		# does NOT apply near the start, since that's also where the ball
-		# sits right after boarding (off ~= 0) - releasing unconditionally
-		# there would eject it before it ever rides anywhere.
+		# Unconditional safety net: once the ball has ridden a real distance
+		# and reached EITHER end, release it no matter what its velocity is
+		# doing. A fast ball on a short channel can cross the whole "near end"
+		# window in a single physics step and never satisfy the
+		# velocity-direction check below, leaving it stuck "on_ramp" (its
+		# collision effectively disabled). The travelled-distance guard is
+		# what makes this safe to apply at both ends: without it, a ball that
+		# BOARDS at a far mouth sits at off ~= length on its very first frame
+		# and is released instantly - which is exactly why shooting a rail
+		# from one end worked and from the other end did nothing at all.
+		var entry_off: float = ball.get_meta("channel_entry_off", 0.0)
 		var end_margin := minf(4.0, length * 0.1)
-		if off >= length - end_margin:
+		if absf(off - entry_off) > 30.0 and (off <= end_margin or off >= length - end_margin):
 			_release(ball)
 			continue
 		# Release when the ball passes an END moving outward (the real exit),
