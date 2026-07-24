@@ -1,2 +1,7 @@
 # Normalize EOL for all files that Git considers text files.
 * text=auto eol=lf
+
+# Illustrator sources are PDF-based, so they contain just enough ASCII for Git
+# to mistake them for text and try to diff/merge (and rewrite line endings on)
+# them. Keep the design sources under assets/tabledesign byte-exact.
+*.ai binary
