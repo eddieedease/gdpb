@@ -64,7 +64,7 @@ script = ExtResource("1_00vba")
 launch_max_speed = 4000.0
 
 [node name="PlayfieldArt" type="Sprite2D" parent="." unique_id=800000010]
-modulate = Color(1, 1, 1, 0.50980395)
+modulate = Color(0.5407008, 0.5407008, 0.5407008, 1)
 z_index = -100
 texture_filter = 1
 position = Vector2(110, 112.00001)
