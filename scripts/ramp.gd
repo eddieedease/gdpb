@@ -268,8 +268,9 @@ func _on_mouth_entered(body: Node, inward: Vector2) -> void:
 	if speed >= whoosh_min_speed and now - _last_whoosh_ms > 450:
 		_last_whoosh_ms = now
 		SoundManager.play("whoosh", lerpf(0.95, 1.2, clampf((speed - whoosh_min_speed) / 1600.0, 0.0, 1.0)))
-	if ramp_score > 0:
-		GameManager.add_score(ramp_score, body.global_position)
+	# NOTE: no score here. A channel pays out for being RIDDEN END TO END, which
+	# is the shot worth making - see _release(). Scoring on entry paid out for
+	# merely nudging a mouth.
 
 
 func _on_field_exited(body: Node) -> void:
@@ -306,16 +307,26 @@ func _release(body: Node) -> void:
 	body.set_meta("on_ramp", false)
 	body.set_meta("channel", null)
 	_riding.erase(body)
+	var rode_through := absf(off - entry_off) > length * 0.5
+	# Pay out only for a completed run: the ball went in one mouth and came
+	# out the other. Backing out the way it came earns nothing.
+	if rode_through and ramp_score > 0:
+		GameManager.add_score(ramp_score, body.global_position)
 	# Listeners (e.g. the upper deck taking delivery of the ball) decide what
 	# happens next, so this stays generic - a channel knows nothing about what
 	# is at either of its ends.
-	ball_released.emit(body, absf(off - entry_off) > length * 0.5)
+	ball_released.emit(body, rode_through)
 
 
 func _physics_process(delta: float) -> void:
 	if Engine.is_editor_hint() or _riding.is_empty() or curve == null:
 		return
-	for ball: RigidBody2D in _riding.duplicate():
+	# The loop variable is deliberately UNTYPED. A ball drained while riding
+	# this channel is freed without _release() ever running, so it stays in
+	# _riding as a dangling reference - and binding that to a `: RigidBody2D`
+	# loop variable throws "Trying to assign invalid previously freed
+	# instance" on the iteration itself, before any guard in the body can run.
+	for ball in _riding.duplicate():
 		if not is_instance_valid(ball):
 			_riding.erase(ball)
 			continue
@@ -361,11 +372,15 @@ func _physics_process(delta: float) -> void:
 		var tangent := (to_global(ahead) - to_global(behind)).normalized()
 		if tangent.length_squared() < 0.5:
 			continue
-		# Steer along the channel, whichever way the ball is already moving,
-		# preserving its speed - the "locked in, keeps momentum" feel.
-		if ball.linear_velocity.dot(tangent) < 0.0:
-			tangent = -tangent
-		var target := tangent * speed
+		# Steer along the channel using only the speed the ball ALREADY has in
+		# that direction (a signed projection - its sign is also what picks
+		# which way along the rail it travels). Redirecting its FULL speed
+		# instead silently converted sideways momentum into along-rail
+		# momentum, so a ball drifting across a mouth got launched up a climb
+		# it never had the pace for. A ball genuinely shot into the mouth is
+		# already aligned, so for real shots this changes nothing.
+		var along: float = ball.linear_velocity.dot(tangent)
+		var target: Vector2 = tangent * along
 		ball.linear_velocity = ball.linear_velocity.lerp(target, clampf(guide_strength * delta, 0.0, 1.0))
 		# Gentle pull toward the centreline.
 		var to_center: Vector2 = to_global(curve.sample_baked(off)) - ball.global_position

@@ -3,11 +3,11 @@ extends AnimatableBody2D
 @export var input_action := "flipper_left"
 @export var rest_angle_deg := 25.0
 @export var active_angle_deg := -30.0
-## How fast the flipper snaps, in rad/s - this IS the flipper strength. ~19
-## sends a ball from the lower flippers up to the mid/upper playfield; 15 is
-## weak, 22+ launches clean off the top. Time the flip so the blade is still
+## How fast the flipper snaps, in rad/s - this IS the flipper strength. 15 is
+## weak, ~19 reaches the mid/upper playfield, 23 is a punchy shot that can
+## carry the full length of the table. Time the flip so the blade is still
 ## swinging when the ball meets it - a held-up flipper just deflects softly.
-@export var rotate_speed := 19.0
+@export var rotate_speed := 23.0
 
 var _was_pressed := false
 

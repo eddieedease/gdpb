@@ -25,10 +25,20 @@ const GAME_PLAYLIST: Array[AudioStream] = [
 	preload("res://assets/sounds/bgm3.mp3"),
 ]
 
+## Menu music is deliberately quieter and a touch slower than in-game music -
+## the title screen should feel like a poolside lounge, not a match in
+## progress. Pitch below ~0.9 starts to sound obviously slowed down.
+const MENU_VOLUME_DB := -9.0
+const MENU_PITCH := 0.92
+const MENU_FADE_IN := 2.5
+const GAME_VOLUME_DB := -2.0
+const GAME_PITCH := 1.0
+
 var _pools := {}
 var _pool_index := {}
 var _playlist: Array[AudioStream] = [MENU_TRACK]
 var _playlist_index := 0
+var _music_volume_db := 0.0
 
 @onready var _music: AudioStreamPlayer = $Music
 
@@ -51,26 +61,38 @@ func _ready() -> void:
 	play_menu_music()
 
 
-## Menu / table-select screen: bgm1 on repeat.
+## Menu / table-select screen: bgm1 on repeat, played as LOUNGE music rather
+## than game music - held well back, eased down a little in pitch so it sits
+## slower and warmer, and faded in instead of slamming on at full volume. To
+## use a different track entirely, just point MENU_TRACK at another bgm file.
 func play_menu_music() -> void:
-	_set_playlist([MENU_TRACK])
+	_set_playlist([MENU_TRACK], MENU_VOLUME_DB, MENU_PITCH, MENU_FADE_IN)
 
 
-## In-game: bgm0/bgm2/bgm3 cycling in a loop.
+## In-game: bgm0/bgm2/bgm3 cycling in a loop, at full energy.
 func play_game_music() -> void:
-	_set_playlist(GAME_PLAYLIST)
+	_set_playlist(GAME_PLAYLIST, GAME_VOLUME_DB, GAME_PITCH, 0.6)
 
 
-func _set_playlist(list: Array[AudioStream]) -> void:
+func _set_playlist(list: Array[AudioStream], volume_db: float, pitch: float, fade_in: float) -> void:
 	_playlist = list
 	_playlist_index = 0
+	_music_volume_db = volume_db
+	_music.pitch_scale = pitch
 	_music.stream = _playlist[0]
+	_music.volume_db = volume_db
 	_music.play()
+	if fade_in > 0.0:
+		_music.volume_db = volume_db - 24.0
+		var tw := create_tween()
+		tw.tween_property(_music, "volume_db", volume_db, fade_in) \
+				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 
 func _advance_music() -> void:
 	_playlist_index = (_playlist_index + 1) % _playlist.size()
 	_music.stream = _playlist[_playlist_index]
+	_music.volume_db = _music_volume_db
 	_music.play()
 
 

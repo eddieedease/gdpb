@@ -26,9 +26,18 @@ const GATE_SCENE := preload("res://scenes/gate.tscn")
 @onready var _spawn: Node2D = $BallSpawn
 @onready var _drain: Area2D = $Drain
 
-var _drops: Array = []
-var _drops_down := 0
-var _resetting_bank := false
+## A set of drop targets that resets together once every one of them is down.
+## The table has more than one: the main playfield bank, and the upper deck's
+## own bank, which must reset independently (they are separate levels, so
+## clearing one has nothing to do with the other).
+class Bank:
+	var targets: Array = []
+	var down := 0
+	var resetting := false
+	var bonus := 5000
+
+var _main_bank := Bank.new()
+var _deck_bank := Bank.new()
 var _launch_charge := 0.0
 
 
@@ -44,10 +53,13 @@ func _ready() -> void:
 	_build_gate()
 	_drain.body_entered.connect(_on_drain_body_entered)
 
-	_drops = get_tree().get_nodes_in_group("drop_targets")
-	for d in _drops:
-		if d.has_signal("hit"):
-			d.hit.connect(_on_drop_hit)
+	_main_bank.targets = get_tree().get_nodes_in_group("drop_targets")
+	_deck_bank.targets = get_tree().get_nodes_in_group("deck_targets")
+	_deck_bank.bonus = 10000   # harder to reach up there, so it pays more
+	for bank in [_main_bank, _deck_bank]:
+		for d in bank.targets:
+			if d.has_signal("hit"):
+				d.hit.connect(_on_drop_hit.bind(bank))
 
 	for r in get_tree().get_nodes_in_group("rollovers"):
 		r.body_entered.connect(_on_rollover.bind(r))
@@ -142,17 +154,17 @@ func _on_rollover(body: Node, _area: Area2D) -> void:
 		SoundManager.play("target")
 
 
-func _on_drop_hit(_target) -> void:
-	_drops_down += 1
-	if _drops_down >= _drops.size() and not _resetting_bank:
-		_resetting_bank = true
-		GameManager.add_score(5000, _target.global_position)
+func _on_drop_hit(_target, bank: Bank) -> void:
+	bank.down += 1
+	if bank.down >= bank.targets.size() and not bank.resetting:
+		bank.resetting = true
+		GameManager.add_score(bank.bonus, _target.global_position)
 		SoundManager.play("target", 0.7)
 		await get_tree().create_timer(1.2).timeout
-		for d in _drops:
+		for d in bank.targets:
 			d.reset_target()
-		_drops_down = 0
-		_resetting_bank = false
+		bank.down = 0
+		bank.resetting = false
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -160,8 +172,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_tree().change_scene_to_file("res://scenes/table_select.tscn")
 	elif event.is_action_pressed("restart") and GameManager.is_game_over:
 		GameManager.reset()
-		for d in _drops:
-			d.reset_target()
-		_drops_down = 0
-		_resetting_bank = false
+		for bank in [_main_bank, _deck_bank]:
+			for d in bank.targets:
+				d.reset_target()
+			bank.down = 0
+			bank.resetting = false
 		_spawn_ball()

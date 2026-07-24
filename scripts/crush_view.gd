@@ -26,6 +26,39 @@ const TABLE_SIZE := Vector2(1280, 2560)
 ## deck's open bottom edge, past its flippers.
 const DECK_BIT := 1 << 8
 
+## The apron - the board margin around the playfield artwork. Soft, wide
+## diagonal stripes cycling through the three accents, like a deck chair or a
+## beach towel. Kept low-contrast on purpose: it should furnish the empty
+## border, never compete with the artwork or the pieces sitting on top of it.
+const APRON_SHADER := "
+shader_type canvas_item;
+uniform vec3 base_color;
+uniform vec3 stripe_a;
+uniform vec3 stripe_b;
+uniform vec3 stripe_c;
+uniform vec2 table_size;
+uniform vec4 art_rect;   // x, y, w, h in table pixels; zero = no artwork
+void fragment() {
+	vec2 p = UV * table_size;
+	float d = UV.x * 1.3 + UV.y * 3.1;
+	float s = fract(d * 5.0);
+	float band = smoothstep(0.0, 0.08, s) * smoothstep(0.52, 0.44, s);
+	float w = fract(d * 1.666);
+	vec3 stripe = w < 0.333 ? stripe_a : (w < 0.666 ? stripe_b : stripe_c);
+	// Fade the stripes out UNDER the playfield artwork. The art is
+	// semi-transparent, so whatever is painted below shows through it - left
+	// unmasked, the stripes read as running straight across the picture.
+	vec2 inset = min(p - art_rect.xy, art_rect.xy + art_rect.zw - p);
+	vec2 fade = smoothstep(vec2(0.0), vec2(70.0), inset);
+	float under_art = fade.x * fade.y;
+	float show = 1.0 - under_art;
+	vec3 col = mix(base_color, stripe, band * 0.30 * show);
+	// a gentle sheen down the length so it is not perfectly uniform
+	col *= 1.0 + 0.10 * sin(UV.y * 6.2831) * show;
+	COLOR = vec4(col, 1.0);
+}
+"
+
 # Elevation tiers. Mid/top pieces are MOVED into their own SubViewports, which
 # render them on separate transparent planes (a viewport reliably renders only
 # its own children). Their physics bodies/areas are then re-homed into the
@@ -39,6 +72,26 @@ const DECK_BIT := 1 << 8
 ## Upper deck: a genuinely raised sub-playfield (its own flipper bank etc,
 ## node names starting with "Deck") rendered well above the top tier.
 @export var deck_height := 0.5
+@export_group("Colours")
+## Everything the 3D scene is built from reads these, so the whole cabinet and
+## backdrop can be re-themed from the inspector without touching code.
+## Defaults are a "tropical pool party" set to go with the playfield art.
+@export var cabinet_color := Color(0.10, 0.13, 0.26)
+@export var rail_color := Color(0.17, 0.22, 0.40)
+## Three accents, used in rotation for neon trim, the deck and the floaters.
+@export var accent_warm := Color(1.0, 0.42, 0.36)      # coral
+@export var accent_cool := Color(0.13, 0.83, 0.78)     # turquoise
+@export var accent_bright := Color(1.0, 0.80, 0.27)    # sunshine yellow
+## The void the cabinet floats in, and the glow along its horizon.
+@export var void_color := Color(0.05, 0.07, 0.17)
+@export var horizon_color := Color(0.20, 0.13, 0.33)
+## How many neon shapes drift around the cabinet (0 disables them).
+@export var floater_count := 16
+@export_group("")
+
+## Marquee text on the backbox, above the live score readout.
+@export var backbox_title := "NEON CRUSH"
+
 ## Height of extruded 3D walls and flippers.
 @export var wall_height := 0.16
 @export var flipper_height := 0.14
@@ -78,6 +131,10 @@ var _punch := 0.0
 var _shadows: Array = []      # [MeshInstance3D, reach factor]
 var _ball_fx := {}            # ball instance_id -> {sphere, blob, blob_mat, lift}
 var _flippers: Array = []     # [flipper Node2D, MeshInstance3D, base_height]
+var _floaters: Array = []     # background neon shapes; see _build_floating_shapes
+var _elapsed := 0.0
+var _score_label: Label3D
+var _balls_label: Label3D
 ## Table-space footprint of the upper deck (padded bounding box of its
 ## content). Defines where the cage walls go and how far a ball must fall
 ## past the deck flippers before it rejoins the playfield below.
@@ -94,16 +151,29 @@ func _ready() -> void:
 	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP_WIDTH
 	win.content_scale_size = Vector2i(1280, 720)
 
-	# Bare table surface colour, behind everything - it only shows where the
-	# playfield artwork doesn't reach. This is an opaque full-table rect, so
-	# its z_index MUST stay below the art's (PlayfieldArt sits at -100):
+	var table := _vp.get_node("Table")
+
+	# The board under everything - it shows in the apron, the margin the
+	# playfield artwork doesn't reach. Flat grey there read as unfinished, so
+	# it gets soft diagonal poolside stripes in the table's accents instead.
+	# Its z_index MUST stay below the art's (PlayfieldArt sits at -100):
 	# being merely first in tree order is not enough, since z_index wins over
 	# tree order and a z=0 rect would paint straight over a z=-100 sprite.
 	# That mismatch is invisible in the editor, where this node doesn't exist.
 	var surface := ColorRect.new()
-	surface.color = Color(0.16, 0.17, 0.22)
 	surface.size = TABLE_SIZE
 	surface.z_index = -1000
+	var apron_sh := Shader.new()
+	apron_sh.code = APRON_SHADER
+	var apron_mat := ShaderMaterial.new()
+	apron_mat.shader = apron_sh
+	apron_mat.set_shader_parameter("base_color", _v3(cabinet_color.lightened(0.05)))
+	apron_mat.set_shader_parameter("stripe_a", _v3(accent_warm))
+	apron_mat.set_shader_parameter("stripe_b", _v3(accent_cool))
+	apron_mat.set_shader_parameter("stripe_c", _v3(accent_bright))
+	apron_mat.set_shader_parameter("table_size", TABLE_SIZE)
+	apron_mat.set_shader_parameter("art_rect", _playfield_art_rect(table))
+	surface.material = apron_mat
 	_vp.add_child(surface)
 	_vp.move_child(surface, 0)
 
@@ -113,7 +183,6 @@ func _ready() -> void:
 
 	# The 3D camera replaces the table's own 2D camera and HUD (the HUD lives
 	# in this scene instead, drawn flat on the real screen).
-	var table := _vp.get_node("Table")
 	var cam2d := table.get_node_or_null("Camera2D")
 	if cam2d:
 		cam2d.queue_free()
@@ -470,7 +539,7 @@ func _build_deck_platform() -> void:
 	box.size = Vector3(size_w.x, plate_thickness, size_w.y)
 	mesh.mesh = box
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.18, 0.2, 0.3)
+	mat.albedo_color = cabinet_color.lightened(0.12)
 	mat.roughness = 0.55
 	mesh.material_override = mat
 	mesh.position = Vector3(wc.x, (plate_top + plate_bottom) * 0.5, wc.z)
@@ -495,9 +564,9 @@ func _build_deck_platform() -> void:
 		strip.mesh = sb
 		var tmat := StandardMaterial3D.new()
 		tmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		tmat.albedo_color = Color(0.85, 0.5, 1.0)
+		tmat.albedo_color = accent_bright
 		tmat.emission_enabled = true
-		tmat.emission = Color(0.85, 0.5, 1.0)
+		tmat.emission = accent_bright
 		tmat.emission_energy_multiplier = 1.6
 		strip.material_override = tmat
 		strip.position = Vector3(wc.x + off.x, plate_top, wc.z + off.y)
@@ -580,11 +649,29 @@ func _build_deck_cage(table: Node2D) -> void:
 	pm.friction = 0.05
 	pm.bounce = 0.4
 	body.physics_material_override = pm
-	var shape := ConcavePolygonShape2D.new()
-	shape.segments = PackedVector2Array(corners)
-	var cs := CollisionShape2D.new()
-	cs.shape = shape
-	body.add_child(cs)
+	# Each wall is a THICK convex slab, not a zero-width segment. A deck
+	# flipper can pin the ball against a wall and squeeze it, and a hairline
+	# barrier loses that fight - the ball pops through and is gone off the top
+	# of the table. Give it real material to push against.
+	var centroid := Vector2.ZERO
+	for p in outline:
+		centroid += p
+	centroid /= float(outline.size())
+	var thickness := 40.0
+	for i in range(0, corners.size(), 2):
+		var a: Vector2 = corners[i]
+		var b: Vector2 = corners[i + 1]
+		var dir := (b - a).normalized()
+		var nrm := Vector2(-dir.y, dir.x)
+		if nrm.dot(((a + b) * 0.5) - centroid) < 0.0:
+			nrm = -nrm   # always push the slab OUTWARD, away from the deck
+		# Overhang the ends so neighbouring slabs overlap at the corners and
+		# leave no seam for the ball to squirt through.
+		var ea := a - dir * thickness * 0.5
+		var eb := b + dir * thickness * 0.5
+		var cp := CollisionPolygon2D.new()
+		cp.polygon = PackedVector2Array([ea, eb, eb + nrm * thickness, ea + nrm * thickness])
+		body.add_child(cp)
 	table.add_child(body)
 
 	# 3D visual: a low glowing rail along those same three edges, sitting on
@@ -605,9 +692,9 @@ func _build_deck_cage(table: Node2D) -> void:
 		mesh.mesh = box
 		var mat := StandardMaterial3D.new()
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.albedo_color = Color(0.55, 0.75, 1.0)
+		mat.albedo_color = accent_cool
 		mat.emission_enabled = true
-		mat.emission = Color(0.4, 0.7, 1.0)
+		mat.emission = accent_cool
 		mat.emission_energy_multiplier = 1.3
 		mesh.material_override = mat
 		mesh.position = Vector3(mid.x, base + h * 0.5, mid.z)
@@ -638,10 +725,16 @@ func _physics_process(_delta: float) -> void:
 	if _deck_rect.size.x <= 0.0:
 		return
 	var floor_y := _deck_rect.position.y + _deck_rect.size.y
+	# Safety net: an on-deck ball collides ONLY with deck geometry, so if one
+	# ever gets past the cage it would sail off the top of the table with
+	# nothing to stop it. Anything outside the deck's footprint rejoins normal
+	# play immediately, whichever side it left by.
+	var escape := _deck_rect.grow(70.0)
 	for b in get_tree().get_nodes_in_group("ball"):
 		if not is_instance_valid(b) or not b.get_meta("on_deck", false):
 			continue
-		if b.global_position.y > floor_y:
+		var p: Vector2 = b.global_position
+		if p.y > floor_y or not escape.has_point(p):
 			_drop_from_deck(b)
 
 
@@ -694,25 +787,33 @@ func _add_screen(tex: Texture2D, height: float, transparent: bool) -> void:
 
 func _build_environment() -> void:
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.01, 0.01, 0.04)
-	sky_mat.sky_horizon_color = Color(0.05, 0.04, 0.11)
-	sky_mat.ground_bottom_color = Color(0.01, 0.01, 0.02)
-	sky_mat.ground_horizon_color = Color(0.05, 0.04, 0.11)
+	sky_mat.sky_top_color = void_color
+	sky_mat.sky_horizon_color = horizon_color
+	sky_mat.ground_bottom_color = void_color.darkened(0.4)
+	sky_mat.ground_horizon_color = horizon_color
 	var sky := Sky.new()
 	sky.sky_material = sky_mat
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.5, 0.55, 0.7)
-	env.ambient_light_energy = 0.6
+	# Warm-tinted fill so the table reads sunlit rather than moonlit.
+	env.ambient_light_color = accent_bright.lerp(Color(0.7, 0.8, 1.0), 0.55)
+	env.ambient_light_energy = 0.75
+	# A little bloom makes the neon accents actually glow instead of just
+	# being bright flat colour.
+	env.glow_enabled = true
+	env.glow_intensity = 0.5
+	env.glow_bloom = 0.15
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 
 	var light := DirectionalLight3D.new()
 	light.rotation_degrees = Vector3(-52, 28, 0)
-	light.light_energy = 1.1
+	light.light_energy = 1.2
+	light.light_color = Color(1.0, 0.95, 0.88)
 	light.shadow_enabled = true
 	add_child(light)
 
@@ -720,9 +821,9 @@ func _build_environment() -> void:
 func _build_cabinet() -> void:
 	var w := TABLE_SIZE.x / PX_PER_M      # 12.8
 	var l := TABLE_SIZE.y / PX_PER_M      # 25.6
-	var body_col := Color(0.09, 0.10, 0.15)
-	var rail_col := Color(0.14, 0.15, 0.22)
-	var neon := Color(0.3, 0.85, 1.0)
+	var body_col := cabinet_color
+	var rail_col := rail_color
+	var neon := accent_cool
 
 	# main body slab under the playfield
 	_box(Vector3(w + 1.0, 1.0, l + 1.0), Vector3(0, -0.52, 0), body_col)
@@ -731,31 +832,111 @@ func _build_cabinet() -> void:
 	_box(Vector3(0.35, 0.6, l + 1.0), Vector3(w * 0.5 + 0.32, -0.05, 0), rail_col)
 	_box(Vector3(w + 1.0, 0.6, 0.35), Vector3(0, -0.05, l * 0.5 + 0.32), rail_col)
 	_box(Vector3(w + 1.0, 0.6, 0.35), Vector3(0, -0.05, -(l * 0.5 + 0.32)), rail_col)
-	# neon accent strips along the rail tops
-	_box(Vector3(0.08, 0.06, l + 1.0), Vector3(-(w * 0.5 + 0.32), 0.28, 0), neon, 1.6)
-	_box(Vector3(0.08, 0.06, l + 1.0), Vector3(w * 0.5 + 0.32, 0.28, 0), neon, 1.6)
+	# neon accent strips along the rail tops - the two sides take different
+	# accents so the cabinet reads as colourful rather than monochrome
+	_box(Vector3(0.08, 0.06, l + 1.0), Vector3(-(w * 0.5 + 0.32), 0.28, 0), neon, 2.2)
+	_box(Vector3(0.08, 0.06, l + 1.0), Vector3(w * 0.5 + 0.32, 0.28, 0), accent_warm, 2.2)
+	# and a bright lip across the near and far ends
+	_box(Vector3(w + 1.0, 0.06, 0.08), Vector3(0, 0.28, l * 0.5 + 0.32), accent_bright, 2.2)
+	_box(Vector3(w + 1.0, 0.06, 0.08), Vector3(0, 0.28, -(l * 0.5 + 0.32)), accent_bright, 2.2)
 	# legs
 	for corner in [Vector3(-w * 0.5 - 0.2, -2.2, l * 0.5 + 0.2), Vector3(w * 0.5 + 0.2, -2.2, l * 0.5 + 0.2),
 			Vector3(-w * 0.5 - 0.2, -2.2, -l * 0.5 - 0.2), Vector3(w * 0.5 + 0.2, -2.2, -l * 0.5 - 0.2)]:
 		_box(Vector3(0.3, 3.4, 0.3), corner, body_col)
 	# backbox with glowing panel at the far (top) end
 	_box(Vector3(w + 1.0, 4.6, 0.9), Vector3(0, 2.0, -(l * 0.5 + 1.0)), body_col)
-	_box(Vector3(w - 1.0, 3.4, 0.1), Vector3(0, 2.1, -(l * 0.5 + 0.52)), Color(0.15, 0.1, 0.35), 1.3)
+	_box(Vector3(w - 1.0, 3.4, 0.1), Vector3(0, 2.1, -(l * 0.5 + 0.52)),
+			accent_warm.lerp(void_color, 0.55), 1.8)
+	# a bright frame around that panel so the backbox reads as lit signage
+	for edge in [[Vector3(w - 0.8, 0.12, 0.12), Vector3(0, 3.85, -(l * 0.5 + 0.5))],
+			[Vector3(w - 0.8, 0.12, 0.12), Vector3(0, 0.35, -(l * 0.5 + 0.5))],
+			[Vector3(0.12, 3.6, 0.12), Vector3(-(w * 0.5 - 0.4), 2.1, -(l * 0.5 + 0.5))],
+			[Vector3(0.12, 3.6, 0.12), Vector3(w * 0.5 - 0.4, 2.1, -(l * 0.5 + 0.5))]]:
+		_box(edge[0], edge[1], accent_bright, 2.4)
+	_build_backbox_display(l)
 	_build_grid_floor()
 	_build_starfield()
+	_build_floating_shapes()
+
+
+## The backbox is the natural home for the score, exactly like a real machine:
+## title marquee up top, big live score under it, balls remaining below. It
+## reads straight off GameManager, so the panel is genuinely live rather than
+## a painted-on decoration.
+func _build_backbox_display(l: float) -> void:
+	var face_z := -(l * 0.5 + 0.44)
+	_backbox_label(backbox_title, 88, accent_bright, Vector3(0, 3.15, face_z))
+	_score_label = _backbox_label("0", 150, Color(1, 0.97, 0.92), Vector3(0, 1.95, face_z))
+	_balls_label = _backbox_label("BALLS 3", 58, accent_cool, Vector3(0, 0.92, face_z))
+	GameManager.score_changed.connect(_on_score_changed)
+	GameManager.balls_changed.connect(_on_balls_changed)
+	_on_score_changed(GameManager.score)
+	_on_balls_changed(GameManager.balls_left)
+
+
+func _backbox_label(text: String, size: int, col: Color, pos: Vector3) -> Label3D:
+	var lbl := Label3D.new()
+	lbl.text = text
+	lbl.font_size = size
+	lbl.pixel_size = 0.012
+	lbl.modulate = col
+	lbl.outline_size = 20
+	lbl.outline_modulate = Color(0.05, 0.02, 0.10)
+	lbl.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	lbl.shaded = false
+	lbl.position = pos
+	add_child(lbl)
+	return lbl
+
+
+func _on_score_changed(value: int) -> void:
+	if not is_instance_valid(_score_label):
+		return
+	_score_label.text = _grouped(value)
+	# A quick punch on every score, so the backbox reacts to play.
+	var tw := create_tween()
+	tw.tween_property(_score_label, "scale", Vector3.ONE * 1.13, 0.07)
+	tw.tween_property(_score_label, "scale", Vector3.ONE, 0.20) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func _on_balls_changed(value: int) -> void:
+	if is_instance_valid(_balls_label):
+		_balls_label.text = "BALLS %d" % maxi(value, 0)
+
+
+## 1234500 -> "1,234,500" - a bare digit run is unreadable at a glance.
+func _grouped(value: int) -> String:
+	var s := str(absi(value))
+	var out := ""
+	var count := 0
+	for i in range(s.length() - 1, -1, -1):
+		out = s[i] + out
+		count += 1
+		if count % 3 == 0 and i > 0:
+			out = "," + out
+	return ("-" + out) if value < 0 else out
 
 
 ## Synthwave grid floor far below the cabinet.
 const GRID_SHADER := "
 shader_type spatial;
 render_mode unshaded, cull_disabled;
+uniform vec3 base_color;
+uniform vec3 line_color;
+uniform vec3 line_color_alt;
 varying vec3 wpos;
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment() {
 	vec2 g = abs(fract(wpos.xz / 3.0) - 0.5);
 	float line = smoothstep(0.44, 0.5, max(g.x, g.y));
 	float fade = clamp(1.0 - length(wpos.xz) / 65.0, 0.0, 1.0);
-	ALBEDO = mix(vec3(0.015, 0.015, 0.04), vec3(0.12, 0.45, 0.65), line * fade * 0.9);
+	// Two accents woven across the grid so it is not one flat hue.
+	float mixer = 0.5 + 0.5 * sin(wpos.x * 0.09 + wpos.z * 0.07 + TIME * 0.35);
+	vec3 lc = mix(line_color, line_color_alt, mixer);
+	// Held back to ~0.6: at full strength the grid is so bright it competes
+	// with the playfield for attention instead of framing it.
+	ALBEDO = mix(base_color, lc, line * fade * 0.6);
 }
 "
 
@@ -768,34 +949,104 @@ func _build_grid_floor() -> void:
 	sh.code = GRID_SHADER
 	var mat := ShaderMaterial.new()
 	mat.shader = sh
+	mat.set_shader_parameter("base_color", Vector3(
+			void_color.r * 0.4, void_color.g * 0.4, void_color.b * 0.4))
+	mat.set_shader_parameter("line_color", Vector3(accent_cool.r, accent_cool.g, accent_cool.b))
+	mat.set_shader_parameter("line_color_alt", Vector3(accent_warm.r, accent_warm.g, accent_warm.b))
 	mesh.material_override = mat
 	mesh.position = Vector3(0, -4.0, 0)
 	add_child(mesh)
 
 
-## Faint stars scattered around the void.
+## Stars scattered around the void, tinted across the palette (a single-colour
+## starfield reads as grey noise from a distance).
 func _build_starfield() -> void:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
 	var quad := QuadMesh.new()
-	quad.size = Vector2(0.3, 0.3)
+	quad.size = Vector2(0.34, 0.34)
 	mm.mesh = quad
-	mm.instance_count = 260
+	mm.instance_count = 300
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
+	var tints := [accent_warm, accent_cool, accent_bright, Color(1, 1, 1)]
 	for i in mm.instance_count:
 		var dir := Vector3(rng.randf_range(-1, 1), rng.randf_range(0.05, 1), rng.randf_range(-1, 1)).normalized()
 		var pos := dir * rng.randf_range(45.0, 75.0)
-		mm.set_instance_transform(i, Transform3D(Basis(), pos))
+		var s := rng.randf_range(0.6, 1.7)
+		mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(s, s, s)), pos))
+		var t: Color = tints[rng.randi() % tints.size()]
+		mm.set_instance_color(i, t.lerp(Color.WHITE, rng.randf_range(0.0, 0.5)))
 	var inst := MultiMeshInstance3D.new()
 	inst.multimesh = mm
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	mat.albedo_color = Color(0.75, 0.85, 1.0, 0.85)
+	mat.vertex_color_use_as_albedo = true
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	inst.material_override = mat
 	add_child(inst)
+
+
+## Neon shapes drifting around the cabinet: rings, cubes, prisms and spheres
+## slowly tumbling and bobbing in the void, in the table's accent colours.
+## They sit well outside the play area so they never fight the playfield for
+## attention - they just stop the background being empty.
+func _build_floating_shapes() -> void:
+	if floater_count <= 0:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	var cols := [accent_warm, accent_cool, accent_bright,
+			accent_warm.lerp(accent_bright, 0.5), accent_cool.lerp(accent_bright, 0.4)]
+	for i in floater_count:
+		var mesh := MeshInstance3D.new()
+		match i % 4:
+			0:
+				var t := TorusMesh.new()
+				t.inner_radius = rng.randf_range(0.5, 0.9)
+				t.outer_radius = t.inner_radius + rng.randf_range(0.25, 0.5)
+				mesh.mesh = t
+			1:
+				var b := BoxMesh.new()
+				b.size = Vector3.ONE * rng.randf_range(0.9, 1.7)
+				mesh.mesh = b
+			2:
+				var p := PrismMesh.new()
+				p.size = Vector3.ONE * rng.randf_range(1.1, 1.9)
+				mesh.mesh = p
+			_:
+				var s := SphereMesh.new()
+				s.radius = rng.randf_range(0.45, 0.85)
+				s.height = s.radius * 2.0
+				mesh.mesh = s
+		var col: Color = cols[rng.randi() % cols.size()]
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.albedo_color = Color(col.r, col.g, col.b, 0.9)
+		mat.emission_enabled = true
+		mat.emission = col
+		mat.emission_energy_multiplier = 1.7
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mesh.material_override = mat
+
+		# Ring them around the cabinet, biased to the sides and far end so
+		# nothing hovers between the camera and the playfield.
+		var ang := TAU * (float(i) / float(floater_count)) + rng.randf_range(-0.15, 0.15)
+		var radius := rng.randf_range(17.0, 30.0)
+		var y := rng.randf_range(-3.0, 13.0)
+		mesh.position = Vector3(sin(ang) * radius, y, -cos(ang) * radius * 0.75)
+		mesh.rotation = Vector3(rng.randf() * TAU, rng.randf() * TAU, rng.randf() * TAU)
+		add_child(mesh)
+		_floaters.append({
+			"node": mesh,
+			"axis": Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized(),
+			"spin": rng.randf_range(0.12, 0.45),
+			"base_y": y,
+			"bob": rng.randf_range(0.3, 1.1),
+			"phase": rng.randf() * TAU,
+		})
 
 
 func _box(size: Vector3, pos: Vector3, color: Color, emission := 0.0) -> void:
@@ -813,6 +1064,24 @@ func _box(size: Vector3, pos: Vector3, color: Color, emission := 0.0) -> void:
 	mesh.material_override = mat
 	mesh.position = pos
 	add_child(mesh)
+
+
+## Colour -> shader vec3 (shader uniforms take no alpha).
+func _v3(c: Color) -> Vector3:
+	return Vector3(c.r, c.g, c.b)
+
+
+## Where the PlayfieldArt sprite actually lands, in table pixels, so the apron
+## knows which part of the board is covered by artwork. Read from the node
+## rather than hard-coded, so moving or rescaling the art in the editor keeps
+## the two in step. Zero rect if there is no artwork.
+func _playfield_art_rect(table: Node) -> Vector4:
+	var art := table.get_node_or_null("PlayfieldArt")
+	if art == null or not (art is Sprite2D) or art.texture == null:
+		return Vector4.ZERO
+	var size: Vector2 = Vector2(art.texture.get_size()) * art.scale
+	var pos: Vector2 = art.position - (size * 0.5 if art.centered else Vector2.ZERO)
+	return Vector4(pos.x, pos.y, size.x, size.y)
 
 
 func _table_to_world(p: Vector2) -> Vector3:
@@ -1025,8 +1294,19 @@ func _on_impact(strength: float) -> void:
 
 func _process(delta: float) -> void:
 	var balls := get_tree().get_nodes_in_group("ball")
-	if not balls.is_empty():
+	if not balls.is_empty() and is_instance_valid(balls[0]):
 		_last_ball = balls[0].global_position
+
+	# Drift the background shapes: each tumbles on its own axis and bobs on
+	# its own phase, so the void reads as alive without anything marching in
+	# step.
+	_elapsed += delta
+	for f in _floaters:
+		var node: Node3D = f["node"]
+		if not is_instance_valid(node):
+			continue
+		node.rotate(f["axis"], f["spin"] * delta)
+		node.position.y = f["base_y"] + sin(_elapsed * 0.55 + f["phase"]) * f["bob"]
 
 	# Shadow direction is camera-relative but falls mostly SIDEWAYS to the
 	# view (plus slightly toward the viewer): a shadow cast straight toward
