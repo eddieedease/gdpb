@@ -67,11 +67,17 @@ void fragment() {
 # the ball meets a bumper's skirt at floor level while the body towers above.
 
 ## Height of the mid / top tiers above the playfield, in metres.
-@export var mid_height := 0.11
-@export var top_height := 0.21
+@export var mid_height := 0.14
+@export var top_height := 0.26
+## How high ramps and rails arc at their peak. Kept SEPARATE from top_height:
+## that one also positions the pieces standing on the top tier, so raising the
+## channels through it would launch the bumpers into the air with them.
+@export var channel_height := 0.46
 ## Upper deck: a genuinely raised sub-playfield (its own flipper bank etc,
-## node names starting with "Deck") rendered well above the top tier.
-@export var deck_height := 0.5
+## node names starting with "Deck") rendered well above the top tier. Must stay
+## clear of channel_height, or a channel arcing under the deck would poke up
+## through its floor plate.
+@export var deck_height := 0.68
 @export_group("Colours")
 ## Everything the 3D scene is built from reads these, so the whole cabinet and
 ## backdrop can be re-themed from the inspector without touching code.
@@ -102,12 +108,12 @@ void fragment() {
 @export_range(0.05, 0.9) var tube_opacity := 0.38
 
 ## Height of extruded 3D walls and flippers.
-@export var wall_height := 0.16
-@export var flipper_height := 0.14
+@export var wall_height := 0.34
+@export var flipper_height := 0.22
 ## Solid geometry built from collision shapes for the scoring pieces.
-@export var target_height := 0.19
-@export var bumper_height := 0.26
-@export var slingshot_height := 0.15
+@export var target_height := 0.30
+@export var bumper_height := 0.42
+@export var slingshot_height := 0.26
 ## Drop shadows: each tier is drawn a second time on the table surface,
 ## darkened and offset. The offset direction follows the CAMERA each frame
 ## (shadows fall toward the viewer), so the perspective reads correctly as
@@ -130,6 +136,9 @@ void fragment() {
 @export var look_ahead := 4.2
 ## How much the camera follows the ball sideways (0 = stays centred).
 @export var side_follow := 0.35
+## How far toward the player the camera is allowed to trail, in metres from the
+## table centre. Lower = it hangs back less when the ball is at the bottom.
+@export var camera_near_limit := 6.5
 @export var follow_speed := 6.0
 @export var camera_fov := 52.0
 
@@ -299,7 +308,7 @@ func _make_tier_viewport() -> SubViewport:
 ## elevation instead of popping up an extra step.
 func _channel_peak(ramp: Node2D) -> float:
 	if ramp.get("curve") == null:
-		return top_height
+		return channel_height
 	# A dedicated deck-feed channel always reaches the deck's own height,
 	# however long or short it is - it's not "how much pop should this piece
 	# have" (that's what the length scaling below is for), it's "arrive at
@@ -312,7 +321,7 @@ func _channel_peak(ramp: Node2D) -> float:
 	# being measured as if unscaled. Multiply by scale to get the true
 	# world-space length.
 	var length: float = ramp.curve.get_baked_length() * ramp.scale.x
-	return top_height * clampf(length / 800.0, 0.35, 1.0)
+	return channel_height * clampf(length / 800.0, 0.35, 1.0)
 
 
 ## Height of a channel at parameter t (0..1). Shared by the rail ribbons, the
@@ -1701,7 +1710,12 @@ func _process(delta: float) -> void:
 
 	var b := _table_to_world(_last_ball)
 	b.x *= side_follow
-	b.z = clampf(b.z, -TABLE_SIZE.y * 0.5 / PX_PER_M, TABLE_SIZE.y * 0.5 / PX_PER_M)
+	# The near limit is deliberately well short of the table's bottom edge. The
+	# shooter lane sits right at that edge, and trailing the ball all the way
+	# down there pushed the camera so far back that the cabinet shrank into the
+	# distance; stopping short keeps the whole cabinet in frame while waiting to
+	# launch.
+	b.z = clampf(b.z, -TABLE_SIZE.y * 0.5 / PX_PER_M, camera_near_limit)
 
 	var target := Vector3(b.x, camera_height, b.z + camera_back)
 	_cam.position = _cam.position.lerp(target, 1.0 - exp(-follow_speed * delta))

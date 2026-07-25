@@ -104,7 +104,8 @@ points = PackedVector2Array(1030, 1440, 994, 1409, 960.57117, 1457.3572, 910, 14
 
 [node name="Bumper0" parent="." unique_id=941541461 instance=ExtResource("7_t1bve")]
 modulate = Color(0.7, 0.85, 1, 1)
-position = Vector2(640, 430)
+position = Vector2(833.00006, 328.00003)
+rotation = 0.016346946
 
 [node name="Bumper1" parent="." unique_id=1606619932 instance=ExtResource("7_t1bve")]
 modulate = Color(1, 0.7, 0.8, 1)
@@ -112,20 +113,16 @@ position = Vector2(316, 816)
 
 [node name="Bumper2" parent="." unique_id=1613699457 instance=ExtResource("7_t1bve")]
 modulate = Color(1, 0.85, 0.6, 1)
-position = Vector2(639, 365)
+position = Vector2(373, 321)
 
 [node name="Bumper3" parent="." unique_id=313051755 instance=ExtResource("7_t1bve")]
 modulate = Color(0.8, 1, 0.85, 1)
-position = Vector2(643.0001, 1002.0001)
+position = Vector2(643.0001, 1040)
 rotation = 0.5296634
 
 [node name="Bumper4" parent="." unique_id=260161831 instance=ExtResource("7_t1bve")]
 modulate = Color(0.7, 0.85, 1, 1)
 position = Vector2(173, 1080)
-
-[node name="Bumper6" parent="." unique_id=192596124 instance=ExtResource("7_t1bve")]
-modulate = Color(1, 0.85, 0.6, 1)
-position = Vector2(640, 1241)
 
 [node name="Bumper7" parent="." unique_id=1159808320 instance=ExtResource("7_t1bve")]
 modulate = Color(0.8, 1, 0.85, 1)
@@ -153,11 +150,12 @@ script = ExtResource("11_doqff")
 shape = SubResource("RectangleShape2D_a0uye")
 
 [node name="Visual" type="Polygon2D" parent="DropTarget1" unique_id=1160255204]
+position = Vector2(-230, -148)
 color = Color(1, 0.55, 0.25, 1)
 polygon = PackedVector2Array(-32, -17, 32, -17, 32, 17, -32, 17)
 
 [node name="DropTarget2" type="StaticBody2D" parent="." unique_id=1610612860 groups=["drop_targets"]]
-position = Vector2(692, 1361)
+position = Vector2(920, 1224)
 script = ExtResource("11_doqff")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="DropTarget2" unique_id=1607439215]
@@ -225,7 +223,6 @@ centering = 8.0
 layer = 5
 
 [node name="Vignette" type="ColorRect" parent="Ambiance" unique_id=77046938]
-visible = false
 modulate = Color(1, 1, 1, 0.34117648)
 self_modulate = Color(1, 1, 1, 0.11372549)
 material = SubResource("shader_vignette")
