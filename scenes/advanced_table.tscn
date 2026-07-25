@@ -147,6 +147,7 @@ position = Vector2(592, 1361)
 script = ExtResource("11_doqff")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="DropTarget1" unique_id=366264189]
+position = Vector2(-230, -148)
 shape = SubResource("RectangleShape2D_a0uye")
 
 [node name="Visual" type="Polygon2D" parent="DropTarget1" unique_id=1160255204]
@@ -265,7 +266,7 @@ position = Vector2(1, -147)
 
 [node name="RampToDeck" parent="." unique_id=1126458492 instance=ExtResource("20_ramp")]
 position = Vector2(725.00006, 937)
-rotation = -0.105706766
+rotation = -0.30495083
 curve = SubResource("Curve2D_2gl5b")
 channel_width = 44.0
 ramp_score = 3000

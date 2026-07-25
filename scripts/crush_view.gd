@@ -97,6 +97,9 @@ void fragment() {
 ## The void the cabinet floats in, and the glow along its horizon.
 @export var void_color := Color(0.035, 0.05, 0.14)
 @export var horizon_color := Color(0.20, 0.13, 0.33)
+## Default colour for flippers. Any individual flipper can override this by
+## setting its own `modulate` on the instance in the 2D editor.
+@export var flipper_color := Color(0.5, 0.68, 1.0)
 ## How many neon shapes drift around the cabinet (0 disables them).
 @export var floater_count := 16
 @export_group("")
@@ -1173,13 +1176,17 @@ func _build_target_visuals() -> void:
 			mat.emission_energy_multiplier = 0.5
 			mesh.material_override = mat
 			add_child(mesh)
-			var w := _table_to_world(t.global_position)
+			# Anchored to the COLLISION shape, not the body: the shape can be
+			# offset from its parent in the editor (moving a target's children
+			# rather than the target itself), and taking the body's position
+			# then floats the block away from where the target really is.
+			var w := _table_to_world(cs.global_position)
 			_targets.append({
 				"node": t, "mesh": mesh, "mat": mat,
 				"xz": Vector2(w.x, w.z),
 				"up_y": base_h + height * 0.5,
 				"down_y": base_h - height * 0.75,
-				"rot": t.global_rotation,
+				"rot": cs.global_rotation,
 			})
 
 
@@ -1204,10 +1211,10 @@ func _build_gate_visuals(table: Node2D) -> void:
 				col = (line as Line2D).default_color
 				col.a = 1.0
 				line.visible = false
-			var w := _table_to_world(g.global_position)
+			var w := _table_to_world(cs.global_position)
 			var root := Node3D.new()
 			root.position = Vector3(w.x, 0.0, w.z)
-			root.rotation.y = -g.global_rotation
+			root.rotation.y = -cs.global_rotation
 			add_child(root)
 
 			# The flap, tilted back the way the ball pushes it open.
@@ -1260,17 +1267,20 @@ func _build_kicker_visuals() -> void:
 			var spr: Node = k.get_node_or_null("Sprite2D")
 			if spr is CanvasItem:
 				spr.visible = false
-			var w := _table_to_world(k.global_position)
 			var mesh: MeshInstance3D = null
 			var circle: CollisionShape2D = k.get_node_or_null("CollisionShape2D")
 			var poly: CollisionPolygon2D = k.get_node_or_null("CollisionPolygon2D")
+			# Positioned from the collision node so an offset shape keeps the
+			# geometry on top of the thing the ball actually hits.
 			if circle and circle.shape is CircleShape2D:
+				var w := _table_to_world(circle.global_position)
 				mesh = _build_bumper_drum((circle.shape as CircleShape2D).radius / PX_PER_M, col)
 				mesh.position = Vector3(w.x, base_h, w.z)
 			elif poly:
+				var w := _table_to_world(poly.global_position)
 				mesh = _build_prism(poly.polygon, col, base_h)
 				mesh.position = Vector3(w.x, 0.0, w.z)
-				mesh.rotation.y = -k.global_rotation
+				mesh.rotation.y = -poly.global_rotation
 				mesh.scale = Vector3(k.scale.x, 1.0, k.scale.y)
 			if mesh == null:
 				continue
@@ -1441,11 +1451,14 @@ func _build_rollover_visuals() -> void:
 		torus.inner_radius = radius * 0.92
 		torus.outer_radius = radius * 1.1
 		ring.mesh = torus
+		# The rim takes the insert's own lit colour, so a rollover recoloured in
+		# the editor is recoloured here too.
+		var ring_col: Color = r.color_lit
 		var rmat := StandardMaterial3D.new()
 		rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		rmat.albedo_color = accent_bright
+		rmat.albedo_color = ring_col
 		rmat.emission_enabled = true
-		rmat.emission = accent_bright
+		rmat.emission = ring_col
 		rmat.emission_energy_multiplier = 1.2
 		ring.material_override = rmat
 		ring.position = Vector3(w.x, 0.016, w.z)
@@ -1576,8 +1589,14 @@ func _build_flipper_visuals() -> void:
 			var scaled := PackedVector2Array()
 			for p in pts:
 				scaled.append(p * f.scale)
-			var top := Color(0.5, 0.68, 1.0)
-			var side := Color(0.2, 0.3, 0.55)
+			# Per-instance colour comes from the flipper node's own `modulate`,
+			# set right on the instance in the 2D editor - the same way bumpers
+			# and slingshots are recoloured. Left white it falls back to the
+			# global flipper_color.
+			var top: Color = f.modulate
+			if top == Color.WHITE:
+				top = flipper_color
+			var side := Color(top.r * 0.42, top.g * 0.42, top.b * 0.42)
 			var st := SurfaceTool.new()
 			st.begin(Mesh.PRIMITIVE_TRIANGLES)
 			var idx := Geometry2D.triangulate_polygon(scaled)
@@ -1736,9 +1755,9 @@ func _process(delta: float) -> void:
 		if not is_instance_valid(node) or not is_instance_valid(ring):
 			continue
 		var lit: bool = node.is_lit
-		# Unlit still needs to be legible as a piece of the table, so it sits at
-		# a dim tint of the lit colour rather than fading into the board.
-		var want: Color = accent_bright if lit else accent_cool.darkened(0.62)
+		# Straight from the insert's own color_lit / color_dark exports, so each
+		# rollover can be coloured individually in the editor.
+		var want: Color = node.color_lit if lit else node.color_dark
 		mat.albedo_color = mat.albedo_color.lerp(want, 1.0 - exp(-11.0 * delta))
 		mat.emission = mat.albedo_color
 		mat.emission_energy_multiplier = 2.4 if lit else 0.25
