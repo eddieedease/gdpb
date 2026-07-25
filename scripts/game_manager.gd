@@ -7,6 +7,9 @@ signal game_over
 signal impact(strength: float)
 ## Fired when points are scored at a known table position (for popups).
 signal points_scored(points: int, at: Vector2)
+## Fired when a whole group is cleared - every target in a bank knocked down,
+## or every light in a rollover set lit. The 3D view throws confetti at `at`.
+signal bank_completed(at: Vector2)
 
 const NO_POS := Vector2(-99999, -99999)
 

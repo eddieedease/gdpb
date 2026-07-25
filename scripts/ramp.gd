@@ -60,6 +60,9 @@ var _bit := 0
 @export var min_board_speed := 450.0
 ## dot(velocity.normalized(), inward) - 0.5 is a ~60 degree cone.
 @export_range(0.0, 1.0) var min_board_alignment := 0.5
+## How far off the mouth's centreline a ball may be and still board, as a
+## multiple of channel_width. Beyond this it visibly missed the opening.
+@export var max_board_offset := 0.6
 
 ## Emitted when a ball leaves this channel. `rode_through` is true only if it
 ## exited the END OPPOSITE the one it boarded at (a full traversal) rather
@@ -67,7 +70,12 @@ var _bit := 0
 ## to the upper deck on a genuine ride.
 signal ball_released(body: Node, rode_through: bool)
 
-var _riding: Array[RigidBody2D] = []
+## Deliberately UNTYPED. A ball drained while riding is freed without
+## _release() running, so this can hold a dangling reference - and a typed
+## Array[RigidBody2D] validates on erase(), refusing to remove the very entry
+## that needs removing ("Attempted to erase an invalid object instance into a
+## TypedArray") and re-erroring every frame from then on.
+var _riding: Array = []
 var _last_whoosh_ms := 0
 
 @onready var _left: Line2D = $Left
@@ -233,10 +241,10 @@ func _make_mouth(at: Vector2, toward: Vector2) -> void:
 	add_child(area)
 	# Inward direction in global space (pieces don't move at runtime).
 	var inward: Vector2 = (to_global(toward) - to_global(at)).normalized()
-	area.body_entered.connect(_on_mouth_entered.bind(inward))
+	area.body_entered.connect(_on_mouth_entered.bind(inward, to_global(at)))
 
 
-func _on_mouth_entered(body: Node, inward: Vector2) -> void:
+func _on_mouth_entered(body: Node, inward: Vector2, mouth_pos: Vector2) -> void:
 	if not body.is_in_group("ball") or body.get_meta("on_ramp", false):
 		return
 	if not body is RigidBody2D:
@@ -249,6 +257,14 @@ func _on_mouth_entered(body: Node, inward: Vector2) -> void:
 	if speed < min_board_speed:
 		return
 	if v.normalized().dot(inward) < min_board_alignment:
+		return
+	# ...and actually lined up with the opening, not skimming past its edge.
+	# The capture zone is a wide cone so approach shots feed in, but a ball
+	# clipping its outer edge was still boarded and then dragged sideways onto
+	# the centreline - so a shot that visibly MISSED the rail appeared to run
+	# alongside it for half its length before being spat back out.
+	var lateral: float = absf((body.global_position - mouth_pos).dot(Vector2(-inward.y, inward.x)))
+	if lateral > channel_width * max_board_offset:
 		return
 	# board the ramp -> ride over the playfield (but keep colliding with the
 	# ramp walls so it stays guided)
@@ -364,7 +380,10 @@ func _physics_process(delta: float) -> void:
 			if ball.linear_velocity.dot(outward) > 0.0:
 				_release(ball)
 				continue
-		if local.distance_to(curve.sample_baked(off)) > channel_width * 1.5:
+		# Tightened from 1.5x: half a channel width plus a ball radius is about
+		# 0.8x, so 1.0x releases a ball that is genuinely outside the tube
+		# without ejecting one that is merely riding off-centre.
+		if local.distance_to(curve.sample_baked(off)) > channel_width * 1.0:
 			_release(ball)
 			continue
 		var ahead := curve.sample_baked(minf(off + 8.0, curve.get_baked_length()))

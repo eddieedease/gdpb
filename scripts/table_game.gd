@@ -172,12 +172,26 @@ func _on_rollover(body: Node, _area: Area2D) -> void:
 		SoundManager.play("target")
 
 
+## Average position of a bank's pieces, for centring the celebration on it.
+func _bank_centre(bank: Bank) -> Vector2:
+	var sum := Vector2.ZERO
+	var count := 0
+	for t in bank.targets:
+		if is_instance_valid(t):
+			sum += t.global_position
+			count += 1
+	return sum / maxi(count, 1)
+
+
 func _on_drop_hit(_target, bank: Bank) -> void:
 	bank.down += 1
 	if bank.down >= bank.targets.size() and not bank.resetting:
 		bank.resetting = true
 		GameManager.add_score(bank.bonus, _target.global_position)
 		SoundManager.play("target", 0.7)
+		# Celebrate over the middle of the whole group, not the last piece hit,
+		# so the burst reads as "that set is cleared".
+		GameManager.bank_completed.emit(_bank_centre(bank))
 		await get_tree().create_timer(1.2).timeout
 		for d in bank.targets:
 			d.reset_target()

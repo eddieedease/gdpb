@@ -44,7 +44,9 @@ func on_ball_hit(_ball: RigidBody2D) -> void:
 		_visual.visible = false
 	GameManager.add_score(points, global_position)
 	GameManager.impact.emit(6.0)
-	SoundManager.play("target")
+	# Its own mechanical clack, not the generic target ping - a drop target
+	# physically falling through the playfield should sound like it.
+	SoundManager.play("drop", randf_range(0.94, 1.08))
 	hit.emit(self)
 
 

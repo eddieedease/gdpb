@@ -115,6 +115,9 @@ void fragment() {
 @export var flipper_height := 0.22
 ## Solid geometry built from collision shapes for the scoring pieces.
 @export var target_height := 0.30
+## How deep a drop target's plate is - deliberately thin, it is a standing
+## card the ball knocks flat, not a block.
+@export var target_thickness := 0.055
 @export var bumper_height := 0.42
 @export var slingshot_height := 0.26
 @export var gate_height := 0.20
@@ -275,8 +278,69 @@ func _ready() -> void:
 	_cam.position = _table_to_world(_last_ball) + Vector3(0, camera_height, camera_back)
 	GameManager.impact.connect(_on_impact)
 	GameManager.points_scored.connect(_on_points_scored)
+	GameManager.bank_completed.connect(_on_bank_completed)
 	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 	SoundManager.play_game_music()
+
+
+## Confetti when a whole group is cleared: a one-shot burst of little coloured
+## cards thrown up over the group, tumbling as they fall. Frees itself once the
+## last card has died, so nothing accumulates over a long game.
+func _on_bank_completed(at: Vector2) -> void:
+	var w := _table_to_world(at)
+	var p := GPUParticles3D.new()
+	p.amount = 140
+	p.lifetime = 1.9
+	p.one_shot = true
+	p.explosiveness = 0.92
+	p.position = Vector3(w.x, 0.35, w.z)
+
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.5
+	pm.direction = Vector3(0, 1, 0)
+	pm.spread = 55.0
+	pm.initial_velocity_min = 2.4
+	pm.initial_velocity_max = 5.2
+	pm.gravity = Vector3(0, -6.5, 0)
+	pm.damping_min = 0.4
+	pm.damping_max = 1.2
+	# Tumble: confetti that does not spin just reads as falling dots.
+	pm.angular_velocity_min = -420.0
+	pm.angular_velocity_max = 420.0
+	pm.scale_min = 0.5
+	pm.scale_max = 1.15
+	# Random colour per card, drawn across the table's accents.
+	var grad := Gradient.new()
+	grad.offsets = PackedFloat32Array([0.0, 0.25, 0.5, 0.75, 1.0])
+	grad.colors = PackedColorArray([accent_warm, accent_cool, accent_bright,
+			accent_warm.lerp(accent_bright, 0.5), Color.WHITE])
+	var gtex := GradientTexture1D.new()
+	gtex.gradient = grad
+	pm.color_initial_ramp = gtex
+	# Fade out at the end of life so they vanish rather than blinking off.
+	var fade := Gradient.new()
+	fade.offsets = PackedFloat32Array([0.0, 0.75, 1.0])
+	fade.colors = PackedColorArray([Color.WHITE, Color.WHITE, Color(1, 1, 1, 0)])
+	var ftex := GradientTexture1D.new()
+	ftex.gradient = fade
+	pm.color_ramp = ftex
+	p.process_material = pm
+
+	var card := QuadMesh.new()
+	card.size = Vector2(0.09, 0.055)
+	var cmat := StandardMaterial3D.new()
+	cmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	cmat.vertex_color_use_as_albedo = true
+	cmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	cmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	cmat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	card.material = cmat
+	p.draw_pass_1 = card
+
+	add_child(p)
+	p.emitting = true
+	get_tree().create_timer(p.lifetime + 0.6).timeout.connect(p.queue_free)
 
 
 ## Yellow "+N" popup rising from the piece that scored.
@@ -1165,7 +1229,10 @@ func _build_target_visuals() -> void:
 			var height := target_height
 			var mesh := MeshInstance3D.new()
 			var box := BoxMesh.new()
-			box.size = Vector3(size2.x / PX_PER_M, height, size2.y / PX_PER_M)
+			# A drop target is a thin upright PLATE, not a block. Taking the
+			# depth from the collision box (which is as deep as the target is
+			# wide) made them read as cubes sitting on the playfield.
+			box.size = Vector3(size2.x / PX_PER_M, height, target_thickness)
 			mesh.mesh = box
 			var mat := StandardMaterial3D.new()
 			mat.albedo_color = col
