@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://yx5rt48kvpxe" path="res://scripts/table_game.gd" id="1_00vba"]
 [ext_resource type="Script" uid="uid://cjhqaf0vcsqun" path="res://scripts/camera_follow.gd" id="2_0ua1b"]
+[ext_resource type="Texture2D" uid="uid://bh8inyhqv5dhv" path="res://assets/background/bg2.png" id="2_jqx0o"]
 [ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="3_6iro6"]
 [ext_resource type="PackedScene" uid="uid://dai16lf6ew7j4" path="res://scenes/wall.tscn" id="5_6qs8c"]
 [ext_resource type="PackedScene" uid="uid://ddbn5tnnjfisx" path="res://scenes/bumper.tscn" id="7_t1bve"]
@@ -15,7 +16,6 @@
 [ext_resource type="Shader" uid="uid://d12524mor7q2y" path="res://shaders/vignette.gdshader" id="18_vignette"]
 [ext_resource type="PackedScene" path="res://scenes/ramp.tscn" id="20_ramp"]
 [ext_resource type="PackedScene" uid="uid://cn11w5wrtl65i" path="res://scenes/deck.tscn" id="21_deck"]
-[ext_resource type="Texture2D" uid="uid://ccrm5mv7c4s1e" path="res://assets/background/bg1.png" id="22_bgart"]
 [ext_resource type="PackedScene" uid="uid://bqr7v2xk1mnop" path="res://scenes/rollover.tscn" id="23_rollover"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_a0uye"]
@@ -61,7 +61,7 @@ z_index = -100
 texture_filter = 1
 position = Vector2(110, 112.00001)
 scale = Vector2(1.869383, 1.869383)
-texture = ExtResource("22_bgart")
+texture = ExtResource("2_jqx0o")
 centered = false
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=1862567166]

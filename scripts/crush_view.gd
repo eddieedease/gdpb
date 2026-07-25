@@ -138,7 +138,7 @@ void fragment() {
 @export var side_follow := 0.35
 ## How far toward the player the camera is allowed to trail, in metres from the
 ## table centre. Lower = it hangs back less when the ball is at the bottom.
-@export var camera_near_limit := 6.5
+@export var camera_near_limit := 9.5
 @export var follow_speed := 6.0
 @export var camera_fov := 52.0
 
@@ -1710,14 +1710,15 @@ func _process(delta: float) -> void:
 
 	var b := _table_to_world(_last_ball)
 	b.x *= side_follow
-	# The near limit is deliberately well short of the table's bottom edge. The
-	# shooter lane sits right at that edge, and trailing the ball all the way
-	# down there pushed the camera so far back that the cabinet shrank into the
-	# distance; stopping short keeps the whole cabinet in frame while waiting to
-	# launch.
-	b.z = clampf(b.z, -TABLE_SIZE.y * 0.5 / PX_PER_M, camera_near_limit)
+	# Where the camera SITS is capped so it never trails far past the cabinet
+	# and shrinks it into the distance. Where it LOOKS still follows the real
+	# ball: aiming at the capped position instead swung the view forward, off
+	# the bottom of the table, and cut the main flippers out of frame - they
+	# sit at almost exactly the same depth as the shooter lane, so the cap
+	# applies just as much when you are actually playing them.
+	var follow_z := clampf(b.z, -TABLE_SIZE.y * 0.5 / PX_PER_M, camera_near_limit)
 
-	var target := Vector3(b.x, camera_height, b.z + camera_back)
+	var target := Vector3(b.x, camera_height, follow_z + camera_back)
 	_cam.position = _cam.position.lerp(target, 1.0 - exp(-follow_speed * delta))
 	if _punch > 0.005:
 		_cam.position += Vector3(randf_range(-_punch, _punch), randf_range(-_punch, _punch), 0)
