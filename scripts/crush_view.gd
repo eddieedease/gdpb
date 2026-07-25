@@ -78,12 +78,18 @@ void fragment() {
 ## Defaults are a "tropical pool party" set to go with the playfield art.
 @export var cabinet_color := Color(0.10, 0.13, 0.26)
 @export var rail_color := Color(0.17, 0.22, 0.40)
+## The playfield BOARD itself - the apron stripes sit on this and the
+## semi-transparent artwork is blended over it. Deliberately light and warm:
+## the board used to share the void's dark blue-grey, which left the table
+## looking bleak and made it blend into the 3D backdrop instead of reading as
+## a lit surface sitting in front of it.
+@export var board_color := Color(0.82, 0.79, 0.74)
 ## Three accents, used in rotation for neon trim, the deck and the floaters.
 @export var accent_warm := Color(1.0, 0.42, 0.36)      # coral
 @export var accent_cool := Color(0.13, 0.83, 0.78)     # turquoise
 @export var accent_bright := Color(1.0, 0.80, 0.27)    # sunshine yellow
 ## The void the cabinet floats in, and the glow along its horizon.
-@export var void_color := Color(0.05, 0.07, 0.17)
+@export var void_color := Color(0.035, 0.05, 0.14)
 @export var horizon_color := Color(0.20, 0.13, 0.33)
 ## How many neon shapes drift around the cabinet (0 disables them).
 @export var floater_count := 16
@@ -91,10 +97,17 @@ void fragment() {
 
 ## Marquee text on the backbox, above the live score readout.
 @export var backbox_title := "NEON CRUSH"
+## How solid the ramp/rail tubes look. Low enough to watch the ball travel
+## inside them; raise it for frostier, more obviously glassy tubes.
+@export_range(0.05, 0.9) var tube_opacity := 0.38
 
 ## Height of extruded 3D walls and flippers.
 @export var wall_height := 0.16
 @export var flipper_height := 0.14
+## Solid geometry built from collision shapes for the scoring pieces.
+@export var target_height := 0.19
+@export var bumper_height := 0.26
+@export var slingshot_height := 0.15
 ## Drop shadows: each tier is drawn a second time on the table surface,
 ## darkened and offset. The offset direction follows the CAMERA each frame
 ## (shadows fall toward the viewer), so the perspective reads correctly as
@@ -135,6 +148,8 @@ var _floaters: Array = []     # background neon shapes; see _build_floating_shap
 var _elapsed := 0.0
 var _score_label: Label3D
 var _balls_label: Label3D
+var _targets: Array = []      # drop-target blocks; see _build_target_visuals
+var _lights: Array = []       # rollover discs; see _build_rollover_visuals
 ## Table-space footprint of the upper deck (padded bounding box of its
 ## content). Defines where the cage walls go and how far a ball must fall
 ## past the deck flippers before it rejoins the playfield below.
@@ -167,7 +182,7 @@ func _ready() -> void:
 	apron_sh.code = APRON_SHADER
 	var apron_mat := ShaderMaterial.new()
 	apron_mat.shader = apron_sh
-	apron_mat.set_shader_parameter("base_color", _v3(cabinet_color.lightened(0.05)))
+	apron_mat.set_shader_parameter("base_color", _v3(board_color))
 	apron_mat.set_shader_parameter("stripe_a", _v3(accent_warm))
 	apron_mat.set_shader_parameter("stripe_b", _v3(accent_cool))
 	apron_mat.set_shader_parameter("stripe_c", _v3(accent_bright))
@@ -232,6 +247,9 @@ func _ready() -> void:
 	_compute_deck_rect()
 	_build_wall_visuals(table)
 	_build_flipper_visuals()
+	_build_target_visuals()
+	_build_kicker_visuals()
+	_build_rollover_visuals()
 	_build_deck_platform()
 	_build_deck_cage(table)
 	_build_environment()
@@ -314,9 +332,9 @@ func _channel_h(ramp: Node2D, t: float) -> float:
 ## longitudinal wires wrapping the ball (open top), a funnel that widens to
 ## each opening, ball-sized 'O' rings at the throats and along the run, and
 ## support posts. Built from the channel's centre curve.
-const TUBE_R := 0.165          # wire ring radius: ball (0.14) + clearance
-const WIRE_HALF := 0.008       # wire thickness
-const WIRE_ANGLES := [-90.0, -45.0, -135.0, 0.0, 180.0]  # bottom, diagonals, sides
+const TUBE_R := 0.165          # tube radius: ball (0.14) + clearance
+const WIRE_HALF := 0.008       # bottom-rail thickness
+const TUBE_SEGS := 14          # facets around the sleeve
 
 ## Sample a curve at evenly spaced points along its length. Curve2D.tessellate()
 ## is adaptive - a long but nearly-straight stretch can collapse to just its
@@ -372,28 +390,70 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 		var k := clampf(minf(t, 1.0 - t) / 0.10, 0.0, 1.0)
 		radii.append(TUBE_R * lerpf(1.45, 1.0, k * k * (3.0 - 2.0 * k)))
 
-	# --- the wires ---
+	# --- the tube: a closed, see-through sleeve swept along the curve, so the
+	# ball is visibly travelling INSIDE the channel rather than along a set of
+	# wires. Drawn transparent and without writing depth, so the opaque ball
+	# (already in the depth buffer by the time transparent surfaces draw) shows
+	# through the near wall while the far wall still reads behind it.
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for phi_deg in WIRE_ANGLES:
-		var phi := deg_to_rad(phi_deg)
-		var cph := cos(phi)
-		var sph := sin(phi)
-		for i in n - 1:
-			var a := centers[i] + normals[i] * cph * radii[i] + Vector3.UP * sph * radii[i]
-			var b := centers[i + 1] + normals[i + 1] * cph * radii[i + 1] + Vector3.UP * sph * radii[i + 1]
-			var up := Vector3.UP * WIRE_HALF
-			_quad(st, a + up, b + up, b - up, a - up, col)
-			_quad(st, a + normals[i] * WIRE_HALF, b + normals[i + 1] * WIRE_HALF,
-					b - normals[i + 1] * WIRE_HALF, a - normals[i] * WIRE_HALF, col)
+	for i in n - 1:
+		for s in TUBE_SEGS:
+			var a0 := TAU * float(s) / float(TUBE_SEGS)
+			var a1 := TAU * float(s + 1) / float(TUBE_SEGS)
+			# Shade the sleeve by angle so the tube has visible form instead of
+			# reading as one flat wash of colour.
+			var shade := 0.55 + 0.45 * (0.5 - 0.5 * cos(a0))
+			var tc := Color(col.r * shade, col.g * shade, col.b * shade, 1.0)
+			_quad(st,
+					_tube_pt(centers[i], normals[i], radii[i], a0),
+					_tube_pt(centers[i + 1], normals[i + 1], radii[i + 1], a0),
+					_tube_pt(centers[i + 1], normals[i + 1], radii[i + 1], a1),
+					_tube_pt(centers[i], normals[i], radii[i], a1), tc)
 	var mesh := MeshInstance3D.new()
 	mesh.mesh = st.commit()
 	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# Left SHADED on purpose: lighting across the curved sleeve is what makes
+	# it read as a glass tube. Unshaded, it was just a flat wash of colour so
+	# faint you could not tell there was a tube there at all.
 	mat.vertex_color_use_as_albedo = true
+	mat.albedo_color = Color(1, 1, 1, tube_opacity)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.roughness = 0.15
+	mat.metallic = 0.35
+	mat.emission_enabled = true
+	mat.emission = col
+	mat.emission_energy_multiplier = 0.45
+	# A bright edge where the sleeve turns away from the viewer gives the tube
+	# a visible silhouette without making it opaque.
+	mat.rim_enabled = true
+	mat.rim = 0.9
+	mat.rim_tint = 0.6
 	mesh.material_override = mat
 	add_child(mesh)
+
+	# An opaque rail along the bottom of the sleeve - the surface the ball
+	# actually appears to roll on, and what stops a fully transparent tube
+	# looking like it has no floor.
+	var rail := SurfaceTool.new()
+	rail.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in n - 1:
+		var a := centers[i] - Vector3.UP * radii[i]
+		var b := centers[i + 1] - Vector3.UP * radii[i + 1]
+		var up := Vector3.UP * WIRE_HALF
+		_quad(rail, a + up, b + up, b - up, a - up, col)
+		_quad(rail, a + normals[i] * WIRE_HALF, b + normals[i + 1] * WIRE_HALF,
+				b - normals[i + 1] * WIRE_HALF, a - normals[i] * WIRE_HALF, col)
+	var rmesh := MeshInstance3D.new()
+	rmesh.mesh = rail.commit()
+	var railmat := StandardMaterial3D.new()
+	railmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	railmat.vertex_color_use_as_albedo = true
+	railmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	rmesh.material_override = railmat
+	add_child(rmesh)
 
 	# --- shadow strip on the board, fading in with height ---
 	var sh := SurfaceTool.new()
@@ -1066,6 +1126,266 @@ func _box(size: Vector3, pos: Vector3, color: Color, emission := 0.0) -> void:
 	add_child(mesh)
 
 
+## Drop targets become real blocks standing on the playfield. When knocked
+## they sink THROUGH the board and vanish, then rise back up on a bank reset -
+## which is what a drop target physically does, and impossible to read from a
+## flat rectangle that simply blinks out.
+func _build_target_visuals() -> void:
+	for tier in [[_vp_top, 0.0], [_vp_deck, deck_height]]:
+		var vp: SubViewport = tier[0]
+		var base_h: float = tier[1]
+		for t in _descendants(vp):
+			if not (t is Node2D) or not t.has_method("reset_target"):
+				continue
+			var cs: CollisionShape2D = t.get_node_or_null("CollisionShape2D")
+			if cs == null or not (cs.shape is RectangleShape2D):
+				continue
+			var size2: Vector2 = (cs.shape as RectangleShape2D).size
+			var col := Color(1, 0.55, 0.25)
+			var vis: Node = t.get_node_or_null("Visual")
+			if vis is Polygon2D:
+				col = (vis as Polygon2D).color
+				vis.visible = false
+			var height := target_height
+			var mesh := MeshInstance3D.new()
+			var box := BoxMesh.new()
+			box.size = Vector3(size2.x / PX_PER_M, height, size2.y / PX_PER_M)
+			mesh.mesh = box
+			var mat := StandardMaterial3D.new()
+			mat.albedo_color = col
+			mat.metallic = 0.1
+			mat.roughness = 0.4
+			mat.emission_enabled = true
+			mat.emission = col
+			mat.emission_energy_multiplier = 0.5
+			mesh.material_override = mat
+			add_child(mesh)
+			var w := _table_to_world(t.global_position)
+			_targets.append({
+				"node": t, "mesh": mesh, "mat": mat,
+				"xz": Vector2(w.x, w.z),
+				"up_y": base_h + height * 0.5,
+				"down_y": base_h - height * 0.75,
+				"rot": t.global_rotation,
+			})
+
+
+## Bumpers and slingshots get solid geometry built from their COLLISION shape,
+## the same way flippers and walls do, instead of a flat sprite lying on the
+## board: round bumpers become drums with a domed cap, and the polygon-shaped
+## slingshots are extruded into wedges.
+func _build_kicker_visuals() -> void:
+	for tier in [[_vp_top, top_height], [_vp_mid, mid_height], [_vp_deck, deck_height]]:
+		var vp: SubViewport = tier[0]
+		var base_h: float = tier[1]
+		for k in _descendants(vp):
+			if not (k is Node2D) or k.get("kick_speed") == null:
+				continue
+			var col: Color = k.modulate
+			if col == Color.WHITE:
+				col = accent_warm
+			var spr: Node = k.get_node_or_null("Sprite2D")
+			if spr is CanvasItem:
+				spr.visible = false
+			var w := _table_to_world(k.global_position)
+			var mesh: MeshInstance3D = null
+			var circle: CollisionShape2D = k.get_node_or_null("CollisionShape2D")
+			var poly: CollisionPolygon2D = k.get_node_or_null("CollisionPolygon2D")
+			if circle and circle.shape is CircleShape2D:
+				mesh = _build_bumper_drum((circle.shape as CircleShape2D).radius / PX_PER_M, col)
+				mesh.position = Vector3(w.x, base_h, w.z)
+			elif poly:
+				mesh = _build_prism(poly.polygon, col, base_h)
+				mesh.position = Vector3(w.x, 0.0, w.z)
+				mesh.rotation.y = -k.global_rotation
+				mesh.scale = Vector3(k.scale.x, 1.0, k.scale.y)
+			if mesh == null:
+				continue
+			add_child(mesh)
+			if k.has_signal("flashed"):
+				k.flashed.connect(_on_kicker_flashed.bind(mesh, mesh.scale))
+
+
+## A pop bumper: skirt drum, bright cap, and a glowing collar.
+func _build_bumper_drum(radius: float, col: Color) -> MeshInstance3D:
+	var root := MeshInstance3D.new()
+	var body := CylinderMesh.new()
+	body.top_radius = radius * 0.62
+	body.bottom_radius = radius
+	body.height = bumper_height
+	root.mesh = body
+	root.position.y = bumper_height * 0.5
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = col
+	mat.roughness = 0.35
+	mat.metallic = 0.25
+	root.material_override = mat
+
+	var cap := MeshInstance3D.new()
+	var dome := SphereMesh.new()
+	dome.radius = radius * 0.62
+	dome.height = radius * 0.62
+	dome.is_hemisphere = true
+	cap.mesh = dome
+	cap.position.y = bumper_height * 0.5
+	var cmat := StandardMaterial3D.new()
+	cmat.albedo_color = col.lightened(0.45)
+	cmat.emission_enabled = true
+	cmat.emission = col
+	cmat.emission_energy_multiplier = 1.6
+	cap.material_override = cmat
+	root.add_child(cap)
+
+	var collar := MeshInstance3D.new()
+	var ring := TorusMesh.new()
+	ring.inner_radius = radius * 0.94
+	ring.outer_radius = radius * 1.06
+	collar.mesh = ring
+	collar.position.y = -bumper_height * 0.5 + 0.012
+	var omat := StandardMaterial3D.new()
+	omat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	omat.albedo_color = accent_bright
+	omat.emission_enabled = true
+	omat.emission = accent_bright
+	omat.emission_energy_multiplier = 1.8
+	collar.material_override = omat
+	root.add_child(collar)
+	return root
+
+
+## Extrude a closed 2D collision polygon into a solid wedge (walls + top cap).
+func _build_prism(poly: PackedVector2Array, col: Color, base_h: float) -> MeshInstance3D:
+	if poly.size() < 3:
+		return null
+	var h := slingshot_height
+	var side := Color(col.r * 0.5, col.g * 0.5, col.b * 0.5)
+	var n := poly.size()
+	# The live face is the LONGEST edge - the same rule kicker.gd uses to decide
+	# which face actually fires, so the marking can never disagree with the
+	# physics. It gets a bright rubber band; the dead sides stay dull.
+	var rubber := 0
+	var rubber_len := -1.0
+	for i in n:
+		var length: float = poly[i].distance_to(poly[(i + 1) % n])
+		if length > rubber_len:
+			rubber_len = length
+			rubber = i
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in n:
+		var a: Vector2 = poly[i]
+		var b: Vector2 = poly[(i + 1) % n]
+		var a3 := Vector3(a.x / PX_PER_M, base_h, a.y / PX_PER_M)
+		var b3 := Vector3(b.x / PX_PER_M, base_h, b.y / PX_PER_M)
+		var up := Vector3(0, h, 0)
+		_quad(st, a3, b3, b3 + up, a3 + up, side)
+	# top cap as a fan from the first vertex (collision polys are convex here)
+	for i in range(1, n - 1):
+		st.set_color(col)
+		st.add_vertex(Vector3(poly[0].x / PX_PER_M, base_h + h, poly[0].y / PX_PER_M))
+		st.set_color(col)
+		st.add_vertex(Vector3(poly[i].x / PX_PER_M, base_h + h, poly[i].y / PX_PER_M))
+		st.set_color(col)
+		st.add_vertex(Vector3(poly[i + 1].x / PX_PER_M, base_h + h, poly[i + 1].y / PX_PER_M))
+	var mesh := MeshInstance3D.new()
+	mesh.mesh = st.commit()
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.roughness = 0.4
+	mesh.material_override = mat
+
+	# The rubber itself: a glowing band standing slightly proud of the live
+	# face, so it is obvious at a glance which side of a slingshot fires.
+	var ra: Vector2 = poly[rubber]
+	var rb: Vector2 = poly[(rubber + 1) % n]
+	var mid := (ra + rb) * 0.5
+	var edge := (rb - ra).normalized()
+	var centroid := Vector2.ZERO
+	for p in poly:
+		centroid += p
+	centroid /= float(n)
+	var nrm := Vector2(-edge.y, edge.x)
+	if nrm.dot(mid - centroid) < 0.0:
+		nrm = -nrm
+	var band := MeshInstance3D.new()
+	var bb := BoxMesh.new()
+	bb.size = Vector3(ra.distance_to(rb) / PX_PER_M, h * 0.44, 0.05)
+	band.mesh = bb
+	var bmat := StandardMaterial3D.new()
+	bmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bmat.albedo_color = accent_bright
+	bmat.emission_enabled = true
+	bmat.emission = accent_bright
+	bmat.emission_energy_multiplier = 2.0
+	band.material_override = bmat
+	var bpos := mid + nrm * 2.0
+	band.position = Vector3(bpos.x / PX_PER_M, base_h + h * 0.62, bpos.y / PX_PER_M)
+	band.rotation.y = -atan2(edge.y, edge.x)
+	mesh.add_child(band)
+	return mesh
+
+
+## The squash MUST be relative to the piece's own base scale. Tweening to an
+## absolute scale threw away the right slingshot's mirrored (1, 1, -1) - so the
+## first hit silently un-mirrored it and the wedge appeared to jump to a new
+## position and stay there.
+func _on_kicker_flashed(mesh: Node3D, base: Vector3) -> void:
+	if not is_instance_valid(mesh):
+		return
+	var tw := create_tween()
+	tw.tween_property(mesh, "scale", base * Vector3(1.16, 0.82, 1.16), 0.05)
+	tw.tween_property(mesh, "scale", base, 0.16) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## Rollover lights: flush glowing discs set into the board. Lit state is
+## polled from the node, so the 3D disc always agrees with the game logic.
+func _build_rollover_visuals() -> void:
+	for r in get_tree().get_nodes_in_group("rollover_lights"):
+		if not (r is Node2D) or r.get("is_lit") == null:
+			continue
+		var vis: Node = r.get_node_or_null("Visual")
+		if vis is CanvasItem:
+			vis.visible = false
+		var radius: float = float(r.get("radius")) / PX_PER_M
+		var disc := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = radius
+		cyl.bottom_radius = radius
+		cyl.height = 0.022
+		disc.mesh = cyl
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.emission_enabled = true
+		disc.material_override = mat
+		var w := _table_to_world(r.global_position)
+		disc.position = Vector3(w.x, 0.014, w.z)
+		add_child(disc)
+
+		var ring := MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = radius * 0.92
+		torus.outer_radius = radius * 1.1
+		ring.mesh = torus
+		var rmat := StandardMaterial3D.new()
+		rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		rmat.albedo_color = accent_bright
+		rmat.emission_enabled = true
+		rmat.emission = accent_bright
+		rmat.emission_energy_multiplier = 1.2
+		ring.material_override = rmat
+		ring.position = Vector3(w.x, 0.016, w.z)
+		add_child(ring)
+		_lights.append({"node": r, "mat": mat, "ring": ring})
+
+
+## A point on the tube wall: `ang` sweeps around the channel's centreline,
+## 0 = outward along the horizontal normal, PI/2 = straight up.
+func _tube_pt(centre: Vector3, nrm: Vector3, r: float, ang: float) -> Vector3:
+	return centre + nrm * cos(ang) * r + Vector3.UP * sin(ang) * r
+
+
 ## Colour -> shader vec3 (shader uniforms take no alpha).
 func _v3(c: Color) -> Vector3:
 	return Vector3(c.r, c.g, c.b)
@@ -1307,6 +1627,49 @@ func _process(delta: float) -> void:
 			continue
 		node.rotate(f["axis"], f["spin"] * delta)
 		node.position.y = f["base_y"] + sin(_elapsed * 0.55 + f["phase"]) * f["bob"]
+
+	# Drop targets: driven off each target's own `is_down`, so the block sinks
+	# out of sight when knocked and rises again when the bank resets, without
+	# needing any extra signal plumbing.
+	for t in _targets:
+		var node = t["node"]
+		var mesh: MeshInstance3D = t["mesh"]
+		if not is_instance_valid(node) or not is_instance_valid(mesh):
+			continue
+		var down: bool = node.is_down
+		var want_y: float = t["down_y"] if down else t["up_y"]
+		var xz: Vector2 = t["xz"]
+		var y: float = lerpf(mesh.position.y, want_y, 1.0 - exp(-13.0 * delta))
+		mesh.position = Vector3(xz.x, y, xz.y)
+		mesh.rotation.y = -float(t["rot"])
+		# Fade out over the last part of the travel so it disappears into the
+		# board rather than clipping through the underside.
+		var span: float = maxf(t["up_y"] - t["down_y"], 0.001)
+		var k: float = clampf((y - t["down_y"]) / span, 0.0, 1.0)
+		var mat: StandardMaterial3D = t["mat"]
+		mat.albedo_color.a = k
+		if down and k < 0.06:
+			mesh.visible = false
+		else:
+			mesh.visible = true
+			if mat.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED and k < 0.99:
+				mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+
+	# Rollover lights: dark when idle, blazing when lit.
+	for lg in _lights:
+		var node = lg["node"]
+		var mat: StandardMaterial3D = lg["mat"]
+		var ring: MeshInstance3D = lg["ring"]
+		if not is_instance_valid(node) or not is_instance_valid(ring):
+			continue
+		var lit: bool = node.is_lit
+		# Unlit still needs to be legible as a piece of the table, so it sits at
+		# a dim tint of the lit colour rather than fading into the board.
+		var want: Color = accent_bright if lit else accent_cool.darkened(0.62)
+		mat.albedo_color = mat.albedo_color.lerp(want, 1.0 - exp(-11.0 * delta))
+		mat.emission = mat.albedo_color
+		mat.emission_energy_multiplier = 2.4 if lit else 0.25
+		ring.scale = Vector3.ONE * (1.0 + (0.07 * sin(_elapsed * 6.0) if lit else 0.0))
 
 	# Shadow direction is camera-relative but falls mostly SIDEWAYS to the
 	# view (plus slightly toward the viewer): a shadow cast straight toward

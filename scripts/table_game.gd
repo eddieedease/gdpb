@@ -38,6 +38,9 @@ class Bank:
 
 var _main_bank := Bank.new()
 var _deck_bank := Bank.new()
+## Rollover lights (scenes/rollover.tscn) expose the same hit / reset_target
+## interface as drop targets, so they run on the same bank machinery.
+var _light_bank := Bank.new()
 var _launch_charge := 0.0
 
 
@@ -56,7 +59,9 @@ func _ready() -> void:
 	_main_bank.targets = get_tree().get_nodes_in_group("drop_targets")
 	_deck_bank.targets = get_tree().get_nodes_in_group("deck_targets")
 	_deck_bank.bonus = 10000   # harder to reach up there, so it pays more
-	for bank in [_main_bank, _deck_bank]:
+	_light_bank.targets = get_tree().get_nodes_in_group("rollover_lights")
+	_light_bank.bonus = 7500
+	for bank in [_main_bank, _deck_bank, _light_bank]:
 		for d in bank.targets:
 			if d.has_signal("hit"):
 				d.hit.connect(_on_drop_hit.bind(bank))
@@ -172,7 +177,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_tree().change_scene_to_file("res://scenes/table_select.tscn")
 	elif event.is_action_pressed("restart") and GameManager.is_game_over:
 		GameManager.reset()
-		for bank in [_main_bank, _deck_bank]:
+		for bank in [_main_bank, _deck_bank, _light_bank]:
 			for d in bank.targets:
 				d.reset_target()
 			bank.down = 0

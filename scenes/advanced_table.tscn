@@ -16,6 +16,7 @@
 [ext_resource type="PackedScene" path="res://scenes/ramp.tscn" id="20_ramp"]
 [ext_resource type="PackedScene" uid="uid://cn11w5wrtl65i" path="res://scenes/deck.tscn" id="21_deck"]
 [ext_resource type="Texture2D" uid="uid://ccrm5mv7c4s1e" path="res://assets/background/bg1.png" id="22_bgart"]
+[ext_resource type="PackedScene" path="res://scenes/rollover.tscn" id="23_rollover"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_a0uye"]
 size = Vector2(64, 34)
@@ -188,35 +189,14 @@ position = Vector2(241, 1506)
 [node name="FlipperUpperRight" parent="." unique_id=1566270602 instance=ExtResource("14_3tj61")]
 position = Vector2(1002, 1522)
 
-[node name="Rollover0" type="Area2D" parent="." unique_id=1968767991 groups=["rollovers"]]
+[node name="RolloverLight0" parent="." unique_id=1968767991 instance=ExtResource("23_rollover")]
 position = Vector2(430, 250)
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Rollover0" unique_id=2047450761]
-shape = SubResource("RectangleShape2D_oe7jm")
-
-[node name="Visual" type="Polygon2D" parent="Rollover0" unique_id=1545474579]
-color = Color(0.3, 0.9, 0.5, 0.35)
-polygon = PackedVector2Array(-30, -30, 30, -30, 30, 30, -30, 30)
-
-[node name="Rollover1" type="Area2D" parent="." unique_id=486778093 groups=["rollovers"]]
+[node name="RolloverLight1" parent="." unique_id=486778093 instance=ExtResource("23_rollover")]
 position = Vector2(640, 220)
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Rollover1" unique_id=139982032]
-shape = SubResource("RectangleShape2D_hwpow")
-
-[node name="Visual" type="Polygon2D" parent="Rollover1" unique_id=18243313]
-color = Color(0.3, 0.9, 0.5, 0.35)
-polygon = PackedVector2Array(-30, -30, 30, -30, 30, 30, -30, 30)
-
-[node name="Rollover2" type="Area2D" parent="." unique_id=370457075 groups=["rollovers"]]
+[node name="RolloverLight2" parent="." unique_id=370457075 instance=ExtResource("23_rollover")]
 position = Vector2(850, 250)
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Rollover2" unique_id=444294019]
-shape = SubResource("RectangleShape2D_bulov")
-
-[node name="Visual" type="Polygon2D" parent="Rollover2" unique_id=644590507]
-color = Color(0.3, 0.9, 0.5, 0.35)
-polygon = PackedVector2Array(-30, -30, 30, -30, 30, 30, -30, 30)
 
 [node name="Drain" type="Area2D" parent="." unique_id=93136100]
 position = Vector2(640, 2520)

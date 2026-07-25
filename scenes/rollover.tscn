@@ -1,0 +1,15 @@
+[gd_scene format=3 uid="uid://bqr7v2xk1mnop"]
+
+[ext_resource type="Script" path="res://scripts/rollover.gd" id="1_ro"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_ro"]
+radius = 34.0
+
+[node name="Rollover" type="Area2D" groups=["rollover_lights"]]
+script = ExtResource("1_ro")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_ro")
+
+[node name="Visual" type="Polygon2D" parent="."]
+color = Color(0.22, 0.25, 0.36, 1)
