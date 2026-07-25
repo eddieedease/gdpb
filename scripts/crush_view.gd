@@ -1245,6 +1245,9 @@ func _build_target_visuals() -> void:
 			if vis is Polygon2D:
 				col = (vis as Polygon2D).color
 				vis.visible = false
+				# Claim the flat art, so the target's own reset doesn't turn it
+				# back on underneath the plate we're about to build.
+				t.set_meta("visual_owned_by_3d", true)
 			var height := target_height
 			var mesh := MeshInstance3D.new()
 			var box := BoxMesh.new()

@@ -40,8 +40,7 @@ func on_ball_hit(_ball: RigidBody2D) -> void:
 		return
 	is_down = true
 	_collision.set_deferred("disabled", true)
-	if _visual:
-		_visual.visible = false
+	_set_visual_shown(false)
 	GameManager.add_score(points, global_position)
 	GameManager.impact.emit(6.0)
 	# Its own mechanical clack, not the generic target ping - a drop target
@@ -53,5 +52,13 @@ func on_ball_hit(_ball: RigidBody2D) -> void:
 func reset_target() -> void:
 	is_down = false
 	_collision.set_deferred("disabled", false)
-	if _visual:
-		_visual.visible = true
+	_set_visual_shown(true)
+
+
+## The 3D view replaces this flat art with a real standing plate and hides it.
+## When it has, leave it alone: turning it back on at reset put the flat
+## rectangle back on the tier plane UNDERNEATH the 3D plate, and the two
+## together read as a solid block instead of a target.
+func _set_visual_shown(shown: bool) -> void:
+	if _visual and not get_meta("visual_owned_by_3d", false):
+		_visual.visible = shown
