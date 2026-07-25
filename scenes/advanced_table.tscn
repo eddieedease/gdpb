@@ -33,9 +33,16 @@ size = Vector2(1280, 2560)
 [sub_resource type="Curve2D" id="Curve2D_jqx0o"]
 resource_local_to_scene = true
 _data = {
-"points": PackedVector2Array(0, 0, 0, 0, -189.11853, 131.45166, 0, 0, 0, 0, 385.9568, -251.7492, 0, 0, 104.75783, -57.57081, 517.2638, -335.12024, 125.576096, -70.971634, -125.576096, 70.971634, 684.14417, -89.06592, 0, 0, 0, 0, -83.04785, 292.9348)
+"points": PackedVector2Array(0, 0, 0, 0, -189.11853, 131.45166, 0, 0, 0, 0, 385.9568, -251.7492, -104.75783, 57.57081, 104.75783, -57.57081, 517.2638, -335.12024, 125.576096, -70.971634, -125.576096, 70.971634, 684.14417, -89.06592, 0, 0, 0, 0, -83.04785, 292.9348)
 }
 point_count = 5
+
+[sub_resource type="Curve2D" id="Curve2D_ai1wt"]
+resource_local_to_scene = true
+_data = {
+"points": PackedVector2Array(0, 0, 0, 0, 117.737915, 51.601837, 0, 0, 220.1721, 2.7764497, 677.0594, 57.994995, 39.796906, -241.75021, -39.796906, 241.75021, 1139.8567, 226.8228)
+}
+point_count = 3
 
 [sub_resource type="ShaderMaterial" id="shader_vignette"]
 shader = ExtResource("18_vignette")
@@ -47,7 +54,7 @@ shader_parameter/glow_strength = 0.05
 
 [sub_resource type="Curve2D" id="Curve2D_2gl5b"]
 _data = {
-"points": PackedVector2Array(0, 0, 0, 0, 0.71969604, 43.95996, 0, 0, 0, 0, 0, -500)
+"points": PackedVector2Array(0, 0, 0, 0, 3.282074, 345.9469, 0, 0, 0, 0, 0, -500)
 }
 point_count = 2
 
@@ -95,7 +102,7 @@ points = PackedVector2Array(1060, 2380, 1060, 1980, 1028, 1941, 960, 2130, 810, 
 points = PackedVector2Array(1170, 360, 1028.87, 307.075, 1032, 123)
 
 [node name="LedgeLeft" parent="." unique_id=31293273 instance=ExtResource("5_6qs8c")]
-position = Vector2(-126, 173)
+position = Vector2(-126, -5)
 points = PackedVector2Array(250, 1440, 370, 1466)
 
 [node name="LedgeRight" parent="." unique_id=883286112 instance=ExtResource("5_6qs8c")]
@@ -223,7 +230,11 @@ mouth_flare = 0.885
 smoothness = 2.982
 guide_strength = 6.0
 centering = 8.0
-max_board_offset = null
+
+[node name="Rail" parent="." unique_id=470856065 instance=ExtResource("16_rail")]
+position = Vector2(215.99998, 1345)
+rotation = -1.5759021
+curve = SubResource("Curve2D_ai1wt")
 
 [node name="Ambiance" type="CanvasLayer" parent="." unique_id=692629535]
 layer = 5
@@ -275,4 +286,3 @@ rotation = -0.30495083
 curve = SubResource("Curve2D_2gl5b")
 channel_width = 44.0
 ramp_score = 3000
-max_board_offset = null

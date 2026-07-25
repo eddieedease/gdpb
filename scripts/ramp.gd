@@ -83,6 +83,16 @@ var _last_whoosh_ms := 0
 
 
 func _ready() -> void:
+	# A channel's walls are offset from its curve in LOCAL space, so a
+	# non-uniform node scale squashes the corridor along one axis: the walls end
+	# up different distances from the centreline depending on which way the
+	# curve is heading, and the ball no longer fits the way channel_width says
+	# it should. Stretch the CURVE to change a rail's length or shape, never the
+	# node's scale.
+	# Threshold is loose: a slight stretch (the sort you get nudging a handle in
+	# the editor) is harmless, a 2x or 3x one is not.
+	if absf(scale.x - scale.y) > 0.35:
+		push_warning("%s has a non-uniform scale %s - this distorts the channel. Scale it uniformly and reshape the curve instead." % [name, scale])
 	_bit = 1 << (RAMP_BIT_BASE + (_next_bit_index % RAMP_BIT_COUNT))
 	_next_bit_index += 1
 	_connect_curve()

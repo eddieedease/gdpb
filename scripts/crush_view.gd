@@ -450,25 +450,40 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 	var n := cpts.size()
 	if n < 2:
 		return
-	# Centreline frames: position at ball-centre height, horizontal normal,
-	# and tube radius (flared into a funnel over the first/last 8%).
+	# Centreline positions first, at ball-centre height, with the tube radius
+	# flared into a funnel over the first/last 10%.
 	var centers: Array[Vector3] = []
-	var normals: Array[Vector3] = []
 	var radii := PackedFloat32Array()
 	for i in n:
 		var t := float(i) / float(n - 1)
 		var w := _table_to_world(ramp.to_global(cpts[i]))
 		centers.append(Vector3(w.x, _channel_h(ramp, t) + BALL_R, w.z))
-		var p_prev := cpts[maxi(i - 1, 0)]
-		var p_next := cpts[mini(i + 1, n - 1)]
-		var tg := (p_next - p_prev).normalized()
-		normals.append(Vector3(-tg.y, 0.0, tg.x))
-		# Gentle funnel. A hard 2.1x flare made the five wires fan out into a
-		# splayed mess at each mouth (nothing ties them together out there),
-		# which read as the rail fraying rather than opening up. A modest
-		# flare plus a rim ring at the very end (below) gives a clean mouth.
+		# Gentle funnel. A hard 2.1x flare made the mouths fan out into a
+		# splayed mess (nothing ties the sleeve together out there), which read
+		# as the rail fraying rather than opening up. A modest flare plus a rim
+		# ring at the very end (below) gives a clean mouth.
 		var k := clampf(minf(t, 1.0 - t) / 0.10, 0.0, 1.0)
 		radii.append(TUBE_R * lerpf(1.45, 1.0, k * k * (3.0 - 2.0 * k)))
+
+	# Then the cross-section frame at each sample, square to the tube's own 3D
+	# direction. This MUST be derived from the WORLD centres above, never from
+	# the curve's local points: the node's rotation sits between the two, so a
+	# local-space normal points the wrong way round the tube. At 90 degrees of
+	# node rotation it ends up pointing straight ALONG the tube and the sleeve
+	# collapses to a flat ribbon - which is why the tube never filled its rings.
+	var tangents: Array[Vector3] = []
+	var side: Array[Vector3] = []
+	var lift: Array[Vector3] = []
+	for i in n:
+		var tg: Vector3 = centers[mini(i + 1, n - 1)] - centers[maxi(i - 1, 0)]
+		if tg.length_squared() < 0.000001:
+			tg = Vector3.FORWARD
+		tg = tg.normalized()
+		var ref := Vector3.UP if absf(tg.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT
+		var rgt := ref.cross(tg).normalized()
+		tangents.append(tg)
+		side.append(rgt)
+		lift.append(tg.cross(rgt).normalized())
 
 	# --- the tube: a closed, see-through sleeve swept along the curve, so the
 	# ball is visibly travelling INSIDE the channel rather than along a set of
@@ -486,10 +501,10 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 			var shade := 0.55 + 0.45 * (0.5 - 0.5 * cos(a0))
 			var tc := Color(col.r * shade, col.g * shade, col.b * shade, 1.0)
 			_quad(st,
-					_tube_pt(centers[i], normals[i], radii[i], a0),
-					_tube_pt(centers[i + 1], normals[i + 1], radii[i + 1], a0),
-					_tube_pt(centers[i + 1], normals[i + 1], radii[i + 1], a1),
-					_tube_pt(centers[i], normals[i], radii[i], a1), tc)
+					_tube_pt(centers[i], side[i], lift[i], radii[i], a0),
+					_tube_pt(centers[i + 1], side[i + 1], lift[i + 1], radii[i + 1], a0),
+					_tube_pt(centers[i + 1], side[i + 1], lift[i + 1], radii[i + 1], a1),
+					_tube_pt(centers[i], side[i], lift[i], radii[i], a1), tc)
 	var mesh := MeshInstance3D.new()
 	mesh.mesh = st.commit()
 	var mat := StandardMaterial3D.new()
@@ -520,12 +535,14 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 	var rail := SurfaceTool.new()
 	rail.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in n - 1:
-		var a := centers[i] - Vector3.UP * radii[i]
-		var b := centers[i + 1] - Vector3.UP * radii[i + 1]
-		var up := Vector3.UP * WIRE_HALF
-		_quad(rail, a + up, b + up, b - up, a - up, col)
-		_quad(rail, a + normals[i] * WIRE_HALF, b + normals[i + 1] * WIRE_HALF,
-				b - normals[i + 1] * WIRE_HALF, a - normals[i] * WIRE_HALF, col)
+		# "Down" is the tube's OWN down, so the rail stays on the floor of the
+		# sleeve as it banks, rather than drifting off it.
+		var a := centers[i] - lift[i] * radii[i]
+		var b := centers[i + 1] - lift[i + 1] * radii[i + 1]
+		_quad(rail, a + lift[i] * WIRE_HALF, b + lift[i + 1] * WIRE_HALF,
+				b - lift[i + 1] * WIRE_HALF, a - lift[i] * WIRE_HALF, col)
+		_quad(rail, a + side[i] * WIRE_HALF, b + side[i + 1] * WIRE_HALF,
+				b - side[i + 1] * WIRE_HALF, a - side[i] * WIRE_HALF, col)
 	var rmesh := MeshInstance3D.new()
 	rmesh.mesh = rail.commit()
 	var railmat := StandardMaterial3D.new()
@@ -539,13 +556,17 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 	var sh := SurfaceTool.new()
 	sh.begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
 	for i in n:
-		var lift := centers[i].y - BALL_R
-		var a2 := clampf(lift / maxf(_channel_peak(ramp), 0.001), 0.0, 1.0) * 0.4
+		var height := centers[i].y - BALL_R
+		var a2 := clampf(height / maxf(_channel_peak(ramp), 0.001), 0.0, 1.0) * 0.4
 		var s := Vector3(centers[i].x, 0.012, centers[i].z)
+		# Flattened to the board: the shadow spreads sideways, not along the
+		# tube's banked frame.
+		var flat := Vector3(side[i].x, 0.0, side[i].z)
+		flat = flat.normalized() * TUBE_R if flat.length() > 0.001 else Vector3(TUBE_R, 0, 0)
 		sh.set_color(Color(0, 0, 0, a2))
-		sh.add_vertex(s + normals[i] * TUBE_R)
+		sh.add_vertex(s + flat)
 		sh.set_color(Color(0, 0, 0, a2))
-		sh.add_vertex(s - normals[i] * TUBE_R)
+		sh.add_vertex(s - flat)
 	var smesh := MeshInstance3D.new()
 	smesh.mesh = sh.commit()
 	var smat := StandardMaterial3D.new()
@@ -569,10 +590,6 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 	for t in ring_ts:
 		var idx := clampi(int(t * (n - 1)), 0, n - 1)
 		var c3 := centers[idx]
-		var i2 := clampi(idx + 1, 0, n - 1)
-		var i1 := clampi(idx - 1, 0, n - 1)
-		var tang3 := centers[i2] - centers[i1]
-		var yaw := atan2(tang3.x, tang3.z)
 		var rr: float = radii[idx]
 		var ring := MeshInstance3D.new()
 		var torus := TorusMesh.new()
@@ -583,8 +600,10 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 		rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		rmat.albedo_color = col.lightened(0.2)
 		ring.material_override = rmat
-		ring.position = c3
-		ring.rotation = Vector3(PI * 0.5, yaw, 0.0)
+		# Exactly the frame the sleeve was swept with, so a ring can never
+		# disagree with the tube it wraps. A TorusMesh's hole runs along its own
+		# +Y, which is why the tangent goes in the basis's Y column.
+		ring.transform = Transform3D(Basis(side[idx], tangents[idx], lift[idx]), c3)
 		add_child(ring)
 		var post_h := c3.y - TUBE_R
 		if post_h > 0.03:
@@ -1535,8 +1554,8 @@ func _build_rollover_visuals() -> void:
 
 ## A point on the tube wall: `ang` sweeps around the channel's centreline,
 ## 0 = outward along the horizontal normal, PI/2 = straight up.
-func _tube_pt(centre: Vector3, nrm: Vector3, r: float, ang: float) -> Vector3:
-	return centre + nrm * cos(ang) * r + Vector3.UP * sin(ang) * r
+func _tube_pt(centre: Vector3, side: Vector3, lift: Vector3, r: float, ang: float) -> Vector3:
+	return centre + side * cos(ang) * r + lift * sin(ang) * r
 
 
 ## Colour -> shader vec3 (shader uniforms take no alpha).
