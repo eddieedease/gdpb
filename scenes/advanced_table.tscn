@@ -33,9 +33,9 @@ size = Vector2(1280, 2560)
 [sub_resource type="Curve2D" id="Curve2D_jqx0o"]
 resource_local_to_scene = true
 _data = {
-"points": PackedVector2Array(0, 0, 0, 0, -193.34302, 108.89667, -52.359455, 32.18237, 52.359455, -32.18237, -54.069824, -4.0926514, 0, 0, 0, 0, 18.205627, -42.84326, 0, 0, 0, 0, 379.57715, -255.302, -104.75783, 57.57081, 104.75783, -57.57081, 514.2295, -331.27875, 121.906166, -70.6318, -121.906166, 70.6318, 684.14417, -89.06592, 29.367163, -16.893158, -29.367163, 16.893158, 128.0354, 231.05707, 0, 0, 0, 0, -73.64911, 311.45007)
+"points": PackedVector2Array(0, 0, 0, 0, -189.11853, 131.45166, 0, 0, 0, 0, 385.9568, -251.7492, 0, 0, 104.75783, -57.57081, 517.2638, -335.12024, 125.576096, -70.971634, -125.576096, 70.971634, 684.14417, -89.06592, 0, 0, 0, 0, -83.04785, 292.9348)
 }
-point_count = 8
+point_count = 5
 
 [sub_resource type="ShaderMaterial" id="shader_vignette"]
 shader = ExtResource("18_vignette")
@@ -143,20 +143,22 @@ rotation = -1.4088156
 scale = Vector2(1, -1)
 
 [node name="DropTarget1" type="StaticBody2D" parent="." unique_id=705315852 groups=["drop_targets"]]
-position = Vector2(592, 1361)
+position = Vector2(354, 1212)
+rotation = -0.33005333
 script = ExtResource("11_doqff")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="DropTarget1" unique_id=366264189]
-position = Vector2(-230, -148)
+position = Vector2(0, 2)
 shape = SubResource("RectangleShape2D_a0uye")
 
 [node name="Visual" type="Polygon2D" parent="DropTarget1" unique_id=1160255204]
-position = Vector2(-230, -148)
+position = Vector2(0, 2)
 color = Color(1, 0.55, 0.25, 1)
 polygon = PackedVector2Array(-32, -17, 32, -17, 32, 17, -32, 17)
 
 [node name="DropTarget2" type="StaticBody2D" parent="." unique_id=1610612860 groups=["drop_targets"]]
 position = Vector2(920, 1224)
+rotation = 0.43512914
 script = ExtResource("11_doqff")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="DropTarget2" unique_id=1607439215]
@@ -167,10 +169,12 @@ color = Color(1, 0.55, 0.25, 1)
 polygon = PackedVector2Array(-32, -17, 32, -17, 32, 17, -32, 17)
 
 [node name="FlipperMainLeft" parent="." unique_id=1173830421 instance=ExtResource("12_78gja")]
+modulate = Color(0.66813153, 6.738305e-07, 0.33688593, 1)
 position = Vector2(478, 2424)
 scale = Vector2(1.1399994, 1.1399994)
 
 [node name="FlipperMainRight" parent="." unique_id=549745985 instance=ExtResource("14_3tj61")]
+modulate = Color(0.6666667, 0, 0.3372549, 1)
 position = Vector2(814, 2424)
 scale = Vector2(1.1677339, 1.1677339)
 
@@ -210,7 +214,7 @@ position = Vector2(1107, 1920)
 rotation = -0.12
 
 [node name="ExampleRail" parent="." unique_id=689590988 instance=ExtResource("16_rail")]
-position = Vector2(511, 1468)
+position = Vector2(511, 1633)
 rotation = -1.0062875
 scale = Vector2(1.0395514, 1.1361759)
 curve = SubResource("Curve2D_jqx0o")
@@ -219,6 +223,7 @@ mouth_flare = 0.885
 smoothness = 2.982
 guide_strength = 6.0
 centering = 8.0
+max_board_offset = null
 
 [node name="Ambiance" type="CanvasLayer" parent="." unique_id=692629535]
 layer = 5
@@ -270,3 +275,4 @@ rotation = -0.30495083
 curve = SubResource("Curve2D_2gl5b")
 channel_width = 44.0
 ramp_score = 3000
+max_board_offset = null
