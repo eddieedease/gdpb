@@ -28,7 +28,20 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	var pos: Vector2 = get_parent().global_position
+	var ball := get_parent()
+	# The trail is flat 2D art on the board, so it cannot follow the ball up a
+	# ramp or onto the deck. Left running, it streaks along the floor while the
+	# ball is up inside a tube - which reads as the ball trailing along OUTSIDE
+	# the rail it is actually travelling through. Drop it while elevated and
+	# start a fresh one when the ball returns to the playfield.
+	var elevated: bool = ball.get_meta("on_ramp", false) or ball.get_meta("on_deck", false)
+	if elevated:
+		if not _pts.is_empty():
+			_pts.clear()
+			points = _pts
+		return
+
+	var pos: Vector2 = ball.global_position
 	if _pts.is_empty() or pos.distance_to(_pts[_pts.size() - 1]) > MIN_DIST:
 		_pts.append(pos)
 		if _pts.size() > MAX_POINTS:

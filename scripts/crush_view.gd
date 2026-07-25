@@ -82,8 +82,8 @@ void fragment() {
 ## Everything the 3D scene is built from reads these, so the whole cabinet and
 ## backdrop can be re-themed from the inspector without touching code.
 ## Defaults are a "tropical pool party" set to go with the playfield art.
-@export var cabinet_color := Color(0.10, 0.13, 0.26)
-@export var rail_color := Color(0.17, 0.22, 0.40)
+@export var cabinet_color := Color(0.055, 0.07, 0.15)
+@export var rail_color := Color(0.10, 0.13, 0.24)
 ## The playfield BOARD itself - the apron stripes sit on this and the
 ## semi-transparent artwork is blended over it. Deliberately light and warm:
 ## the board used to share the void's dark blue-grey, which left the table
@@ -114,6 +114,7 @@ void fragment() {
 @export var target_height := 0.30
 @export var bumper_height := 0.42
 @export var slingshot_height := 0.26
+@export var gate_height := 0.20
 ## Drop shadows: each tier is drawn a second time on the table surface,
 ## darkened and offset. The offset direction follows the CAMERA each frame
 ## (shadows fall toward the viewer), so the perspective reads correctly as
@@ -242,7 +243,9 @@ func _ready() -> void:
 		elif n.begins_with("Bumper") or n.begins_with("DropTarget"):
 			child.reparent(_vp_top)
 			_rehome_physics(child, space)
-		elif n.begins_with("Flipper") or n.begins_with("Slingshot") or n == "LaneGate":
+		# begins_with, not ==: a table can hold several gates ("LaneGate2"...),
+		# and an exact match left the extra ones behind on the base tier.
+		elif n.begins_with("Flipper") or n.begins_with("Slingshot") or n.begins_with("LaneGate"):
 			child.reparent(_vp_mid)
 			_rehome_physics(child, space)
 	_add_screen(_vp.get_texture(), 0.0, false)
@@ -258,6 +261,7 @@ func _ready() -> void:
 	_build_flipper_visuals()
 	_build_target_visuals()
 	_build_kicker_visuals()
+	_build_gate_visuals(table)
 	_build_rollover_visuals()
 	_build_deck_platform()
 	_build_deck_cage(table)
@@ -1177,6 +1181,66 @@ func _build_target_visuals() -> void:
 				"down_y": base_h - height * 0.75,
 				"rot": t.global_rotation,
 			})
+
+
+## One-way gates: a hinged flap on two posts, standing above the board. They
+## were left as a flat line, so the one piece whose whole purpose is "the ball
+## passes over this way but not back" read as painted on. Found by their
+## one_way_collision shape rather than by name, so any gate gets the treatment.
+func _build_gate_visuals(table: Node2D) -> void:
+	var seen := {}
+	for parent in [table, _vp_mid, _vp_top, _vp_deck]:
+		for g in _descendants(parent):
+			if not (g is Node2D) or seen.has(g.get_instance_id()):
+				continue
+			var cs: CollisionShape2D = g.get_node_or_null("CollisionShape2D")
+			if cs == null or not cs.one_way_collision or not (cs.shape is RectangleShape2D):
+				continue
+			seen[g.get_instance_id()] = true
+			var span: float = (cs.shape as RectangleShape2D).size.x / PX_PER_M
+			var line: Node = g.get_node_or_null("Line2D")
+			var col := accent_cool
+			if line is Line2D:
+				col = (line as Line2D).default_color
+				col.a = 1.0
+				line.visible = false
+			var w := _table_to_world(g.global_position)
+			var root := Node3D.new()
+			root.position = Vector3(w.x, 0.0, w.z)
+			root.rotation.y = -g.global_rotation
+			add_child(root)
+
+			# The flap, tilted back the way the ball pushes it open.
+			var flap := MeshInstance3D.new()
+			var fb := BoxMesh.new()
+			fb.size = Vector3(span, gate_height * 0.9, 0.035)
+			flap.mesh = fb
+			var fmat := StandardMaterial3D.new()
+			fmat.albedo_color = Color(col.r, col.g, col.b, 0.75)
+			fmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			fmat.emission_enabled = true
+			fmat.emission = col
+			fmat.emission_energy_multiplier = 1.2
+			fmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+			flap.mesh.material = fmat
+			flap.position = Vector3(0, gate_height * 0.52, 0)
+			flap.rotation.x = deg_to_rad(-18.0)
+			root.add_child(flap)
+
+			for side in [-1.0, 1.0]:
+				var post := MeshInstance3D.new()
+				var pm := CylinderMesh.new()
+				pm.top_radius = 0.028
+				pm.bottom_radius = 0.032
+				pm.height = gate_height
+				post.mesh = pm
+				var pmat := StandardMaterial3D.new()
+				pmat.albedo_color = rail_color.lightened(0.35)
+				pmat.metallic = 0.5
+				pmat.roughness = 0.3
+				post.mesh.material = pmat
+				post.position = Vector3(side * span * 0.5, gate_height * 0.5, 0)
+				root.add_child(post)
 
 
 ## Bumpers and slingshots get solid geometry built from their COLLISION shape,
