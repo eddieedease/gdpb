@@ -69,6 +69,8 @@ func _ready() -> void:
 	for r in get_tree().get_nodes_in_group("rollovers"):
 		r.body_entered.connect(_on_rollover.bind(r))
 
+	GameManager.game_over.connect(_on_game_over)
+
 	_spawn_ball()
 
 
@@ -151,6 +153,17 @@ func _on_drain_body_entered(body: Node) -> void:
 	if not GameManager.is_game_over:
 		await get_tree().create_timer(0.9).timeout
 		_spawn_ball()
+
+
+## Let the final score sit on screen for a moment, then hand over to the high
+## score table - which decides for itself whether that score earned a place.
+func _on_game_over() -> void:
+	var final_score := GameManager.score
+	await get_tree().create_timer(2.6).timeout
+	if not is_inside_tree():
+		return
+	HighScores.pending_score = final_score
+	get_tree().change_scene_to_file("res://scenes/high_scores.tscn")
 
 
 func _on_rollover(body: Node, _area: Area2D) -> void:

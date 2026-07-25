@@ -24,5 +24,5 @@ func _on_balls_changed(balls: int) -> void:
 
 
 func _on_game_over() -> void:
-	message_label.text = "GAME OVER\nFinal score: %d\nPress ENTER to restart" % GameManager.score
+	message_label.text = "GAME OVER\nFinal score: %d" % GameManager.score
 	message_label.visible = true

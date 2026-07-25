@@ -16,7 +16,7 @@
 [ext_resource type="PackedScene" path="res://scenes/ramp.tscn" id="20_ramp"]
 [ext_resource type="PackedScene" uid="uid://cn11w5wrtl65i" path="res://scenes/deck.tscn" id="21_deck"]
 [ext_resource type="Texture2D" uid="uid://ccrm5mv7c4s1e" path="res://assets/background/bg1.png" id="22_bgart"]
-[ext_resource type="PackedScene" path="res://scenes/rollover.tscn" id="23_rollover"]
+[ext_resource type="PackedScene" uid="uid://bqr7v2xk1mnop" path="res://scenes/rollover.tscn" id="23_rollover"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_a0uye"]
 size = Vector2(64, 34)
@@ -24,22 +24,13 @@ size = Vector2(64, 34)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_k4m7e"]
 size = Vector2(64, 34)
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_oe7jm"]
-size = Vector2(60, 60)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_hwpow"]
-size = Vector2(60, 60)
-
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_bulov"]
-size = Vector2(60, 60)
-
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_0smtb"]
 size = Vector2(1280, 80)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_dqafr"]
 size = Vector2(1280, 2560)
 
-[sub_resource type="Curve2D" id="Curve2D_upohv"]
+[sub_resource type="Curve2D" id="Curve2D_jqx0o"]
 resource_local_to_scene = true
 _data = {
 "points": PackedVector2Array(0, 0, 0, 0, -193.34302, 108.89667, -52.359455, 32.18237, 52.359455, -32.18237, -54.069824, -4.0926514, 0, 0, 0, 0, 18.205627, -42.84326, 0, 0, 0, 0, 379.57715, -255.302, -104.75783, 57.57081, 104.75783, -57.57081, 514.2295, -331.27875, 121.906166, -70.6318, -121.906166, 70.6318, 684.14417, -89.06592, 29.367163, -16.893158, -29.367163, 16.893158, 128.0354, 231.05707, 0, 0, 0, 0, -73.64911, 311.45007)
@@ -56,7 +47,7 @@ shader_parameter/glow_strength = 0.05
 
 [sub_resource type="Curve2D" id="Curve2D_2gl5b"]
 _data = {
-"points": PackedVector2Array(0, 0, 0, 0, -3.242035, 339.67993, 0, 0, 0, 0, 0, -500)
+"points": PackedVector2Array(0, 0, 0, 0, 0.71969604, 43.95996, 0, 0, 0, 0, 0, -500)
 }
 point_count = 2
 
@@ -125,7 +116,8 @@ position = Vector2(639, 365)
 
 [node name="Bumper3" parent="." unique_id=313051755 instance=ExtResource("7_t1bve")]
 modulate = Color(0.8, 1, 0.85, 1)
-position = Vector2(627, 971)
+position = Vector2(643.0001, 1002.0001)
+rotation = 0.5296634
 
 [node name="Bumper4" parent="." unique_id=260161831 instance=ExtResource("7_t1bve")]
 modulate = Color(0.7, 0.85, 1, 1)
@@ -190,13 +182,13 @@ position = Vector2(241, 1506)
 position = Vector2(1002, 1522)
 
 [node name="RolloverLight0" parent="." unique_id=1968767991 instance=ExtResource("23_rollover")]
-position = Vector2(430, 250)
+position = Vector2(429, 1709)
 
 [node name="RolloverLight1" parent="." unique_id=486778093 instance=ExtResource("23_rollover")]
-position = Vector2(640, 220)
+position = Vector2(639, 1679)
 
 [node name="RolloverLight2" parent="." unique_id=370457075 instance=ExtResource("23_rollover")]
-position = Vector2(850, 250)
+position = Vector2(849, 1709)
 
 [node name="Drain" type="Area2D" parent="." unique_id=93136100]
 position = Vector2(640, 2520)
@@ -222,7 +214,7 @@ rotation = -0.12
 position = Vector2(511, 1468)
 rotation = -1.0062875
 scale = Vector2(1.0395514, 1.1361759)
-curve = SubResource("Curve2D_upohv")
+curve = SubResource("Curve2D_jqx0o")
 channel_width = 50.0
 mouth_flare = 0.885
 smoothness = 2.982
@@ -275,8 +267,8 @@ rotation = -0.12
 position = Vector2(1, -147)
 
 [node name="RampToDeck" parent="." unique_id=1126458492 instance=ExtResource("20_ramp")]
-position = Vector2(772.00006, 902.0001)
-rotation = -0.2838
+position = Vector2(725.00006, 937)
+rotation = -0.105706766
 curve = SubResource("Curve2D_2gl5b")
 channel_width = 44.0
 ramp_score = 3000

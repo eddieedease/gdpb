@@ -16,14 +16,12 @@ const SFX := {
 
 const POOL_SIZE := 4
 
-## Menu: a single track on repeat. In-game: cycles through all three,
-## looping the whole playlist.
-const MENU_TRACK := preload("res://assets/sounds/bgm1.mp3")
-const GAME_PLAYLIST: Array[AudioStream] = [
-	preload("res://assets/sounds/bgm0.mp3"),
-	preload("res://assets/sounds/bgm2.mp3"),
-	preload("res://assets/sounds/bgm3.mp3"),
-]
+## One track per context, each on repeat. bgmain is the table's own theme; the
+## front-end screens get their own tracks so moving between them is audible.
+## Swapping any of these is a one-line change.
+const GAME_TRACK := preload("res://assets/sounds/bgmain.mp3")
+const MENU_TRACK := preload("res://assets/sounds/bgm2.mp3")
+const HIGHSCORE_TRACK := preload("res://assets/sounds/bgm0.mp3")
 
 ## Menu music is deliberately quieter and a touch slower than in-game music -
 ## the title screen should feel like a poolside lounge, not a match in
@@ -69,9 +67,14 @@ func play_menu_music() -> void:
 	_set_playlist([MENU_TRACK], MENU_VOLUME_DB, MENU_PITCH, MENU_FADE_IN)
 
 
-## In-game: bgm0/bgm2/bgm3 cycling in a loop, at full energy.
+## In-game: the table's own theme, at full energy.
 func play_game_music() -> void:
-	_set_playlist(GAME_PLAYLIST, GAME_VOLUME_DB, GAME_PITCH, 0.6)
+	_set_playlist([GAME_TRACK], GAME_VOLUME_DB, GAME_PITCH, 0.6)
+
+
+## High score table: lounge treatment like the menu, but its own track.
+func play_highscore_music() -> void:
+	_set_playlist([HIGHSCORE_TRACK], MENU_VOLUME_DB, MENU_PITCH, 1.4)
 
 
 func _set_playlist(list: Array[AudioStream], volume_db: float, pitch: float, fade_in: float) -> void:
