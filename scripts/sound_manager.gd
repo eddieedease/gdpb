@@ -49,7 +49,9 @@ func _ready() -> void:
 		for i in POOL_SIZE:
 			var p := AudioStreamPlayer.new()
 			p.stream = SFX[name]
-			p.bus = "Master"
+			# Routed through the SFX bus so the settings slider governs every
+			# effect at once, including pools created here at startup.
+			p.bus = Settings.SFX_BUS
 			add_child(p)
 			pool.append(p)
 		_pools[name] = pool
@@ -57,6 +59,7 @@ func _ready() -> void:
 
 	GameManager.game_over.connect(func(): play("game_over"))
 
+	_music.bus = Settings.MUSIC_BUS
 	_music.finished.connect(_advance_music)
 	play_menu_music()
 

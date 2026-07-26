@@ -9,6 +9,10 @@ extends Line2D
 
 @export var wall_bounce := 0.25
 @export var wall_friction := 0.1
+## Collision thickness in pixels. The wall's drawn line stays where it is; this
+## only gives the barrier some body so a fast ball cannot cross it. Small enough
+## (half a ball radius) that the play surface does not visibly move.
+@export var thickness := 14.0
 
 
 func _ready() -> void:
@@ -21,15 +25,25 @@ func _ready() -> void:
 	mat.friction = wall_friction
 	mat.bounce = wall_bounce
 	body.physics_material_override = mat
-	# ConcavePolygonShape2D with explicit segment pairs stays an OPEN polyline.
-	# (CollisionPolygon2D would close the loop with an extra invisible segment.)
-	var segs := PackedVector2Array()
+	# One THICK convex quad per segment, rather than a zero-width polyline.
+	# A ConcavePolygonShape2D of segments is a hairline barrier: a ball driven
+	# hard into it, or squeezed against it by a flipper, can end up on the far
+	# side and out of play. Real thickness is what stops that - the same fix the
+	# deck cage needed. Each quad overhangs its ends so neighbours overlap at
+	# the joints and leave no gap to slip through, and the quads stay convex,
+	# which the physics engine handles far more robustly than a concave chain.
+	var half := thickness * 0.5
 	for i in points.size() - 1:
-		segs.append(points[i])
-		segs.append(points[i + 1])
-	var shape := ConcavePolygonShape2D.new()
-	shape.segments = segs
-	var col := CollisionShape2D.new()
-	col.shape = shape
-	body.add_child(col)
+		var a: Vector2 = points[i]
+		var b: Vector2 = points[i + 1]
+		var dir := (b - a)
+		if dir.length() < 0.001:
+			continue
+		dir = dir.normalized()
+		var nrm := Vector2(-dir.y, dir.x) * half
+		var ea := a - dir * half
+		var eb := b + dir * half
+		var cp := CollisionPolygon2D.new()
+		cp.polygon = PackedVector2Array([ea + nrm, eb + nrm, eb - nrm, ea - nrm])
+		body.add_child(cp)
 	add_child(body)

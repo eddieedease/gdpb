@@ -178,9 +178,11 @@ var _balls_label: Label3D
 var _multiball_label: Label3D
 var _multiball_lit := false
 var _multiball_tween: Tween
+var _pause_menu: CanvasLayer
 ## Mirrors table_game's multiball requirements, purely for the legend text.
-const MULTIBALL_DECK_TARGET := 2
-const MULTIBALL_MAIN_TARGET := 3
+const MULTIBALL_DECK_TARGET := 1
+const MULTIBALL_MAIN_TARGET := 2
+const MULTIBALL_LIGHT_TARGET := 1
 var _targets: Array = []      # drop-target blocks; see _build_target_visuals
 var _lights: Array = []       # rollover discs; see _build_rollover_visuals
 var _spinners: Array = []   # spinner blades; see _build_spinner_visuals
@@ -299,6 +301,9 @@ func _ready() -> void:
 	GameManager.bank_completed.connect(_on_bank_completed)
 	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 	SoundManager.play_game_music()
+
+	_pause_menu = preload("res://scripts/pause_menu.gd").new()
+	add_child(_pause_menu)
 
 
 ## Confetti when a whole group is cleared: a one-shot burst of little coloured
@@ -883,6 +888,13 @@ func _build_deck_cage(table: Node2D) -> void:
 func _on_deck_channel_released(body: Node, rode_through: bool) -> void:
 	if not rode_through or not is_instance_valid(body):
 		return
+	# ...and it has to actually have ARRIVED on the deck. The same channel
+	# ridden the other way (top to bottom) is just as much a full traversal,
+	# and that one ends on the playfield - handing the ball to the deck's
+	# physics layer down there would leave it ignoring every wall until the
+	# next frame noticed and put it back.
+	if not _deck_rect.has_point(body.global_position):
+		return
 	body.collision_layer = DECK_BIT
 	body.collision_mask = DECK_BIT
 	body.z_index = 20
@@ -1056,7 +1068,7 @@ func _build_backbox_display(l: float) -> void:
 	GameManager.multiball_changed.connect(_on_multiball_changed)
 	_on_score_changed(GameManager.score)
 	_on_balls_changed(GameManager.balls_left)
-	_on_multiball_progress(0, 0)
+	_on_multiball_progress(0, 0, 0)
 
 
 func _backbox_label(text: String, size: int, col: Color, pos: Vector3) -> Label3D:
@@ -1090,14 +1102,22 @@ func _on_balls_changed(value: int) -> void:
 		_balls_label.text = "BALLS %d" % maxi(value, 0)
 
 
-## Legend on the backbox. While multiball is off it counts the two banks toward
-## lighting it; while it runs it just says so, pulsing, and stops counting.
-func _on_multiball_progress(deck_clears: int, main_clears: int) -> void:
+## Legend on the backbox. While multiball is off it counts the three groups
+## toward lighting it; while it runs it just says so, pulsing, and stops
+## counting. A group that is already done shows a tick instead of a fraction, so
+## what is still outstanding reads at a glance.
+func _on_multiball_progress(deck_clears: int, main_clears: int, light_clears: int) -> void:
 	if not is_instance_valid(_multiball_label) or _multiball_lit:
 		return
 	_multiball_label.modulate = accent_warm
-	_multiball_label.text = "MULTIBALL   DECK %d/%d   BANK %d/%d" % [
-			deck_clears, MULTIBALL_DECK_TARGET, main_clears, MULTIBALL_MAIN_TARGET]
+	_multiball_label.text = "MULTIBALL  %s %s %s" % [
+			_leg("DECK", deck_clears, MULTIBALL_DECK_TARGET),
+			_leg("BANK", main_clears, MULTIBALL_MAIN_TARGET),
+			_leg("LANES", light_clears, MULTIBALL_LIGHT_TARGET)]
+
+
+func _leg(name_: String, got: int, needed: int) -> String:
+	return "%s OK" % name_ if got >= needed else "%s %d/%d" % [name_, got, needed]
 
 
 func _on_multiball_changed(active: bool) -> void:
@@ -1113,7 +1133,7 @@ func _on_multiball_changed(active: bool) -> void:
 		_multiball_tween.tween_property(_multiball_label, "modulate", accent_warm, 0.35)
 		_multiball_tween.tween_property(_multiball_label, "modulate", accent_bright, 0.35)
 	else:
-		_on_multiball_progress(0, 0)
+		_on_multiball_progress(0, 0, 0)
 
 
 ## 1234500 -> "1,234,500" - a bare digit run is unreadable at a glance.
@@ -2071,6 +2091,12 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	# Forward input into the SubViewport so the table's own handlers
-	# (Esc to menu, Enter to restart) keep working.
+	# Esc / Start opens the pause overlay instead of dropping straight out to
+	# the menu, and is deliberately NOT forwarded into the table below.
+	if event.is_action_pressed("ui_cancel") and is_instance_valid(_pause_menu):
+		get_viewport().set_input_as_handled()
+		_pause_menu.toggle()
+		return
+	# Everything else goes into the SubViewport so the table's own handlers
+	# (flippers, launch, restart) keep working.
 	_vp.push_input(event)

@@ -43,12 +43,14 @@ var _deck_bank := Bank.new()
 var _light_bank := Bank.new()
 var _launch_charge := 0.0
 
-## Multiball is lit by clearing the DECK bank twice and the LOWER bank three
-## times. Progress only accumulates while multiball is INACTIVE - clears made
-## during multiball count for nothing - and both counters go back to zero when
-## it ends, so each multiball has to be earned from scratch.
-@export var multiball_deck_clears := 2
-@export var multiball_main_clears := 3
+## Multiball is lit by clearing all three groups: the deck bank, the lower bank
+## and the rollover set, each the number of times below. Progress only
+## accumulates while multiball is INACTIVE - clears made during multiball count
+## for nothing - and every counter goes back to zero when it ends, so each
+## multiball has to be earned from scratch.
+@export var multiball_deck_clears := 1
+@export var multiball_main_clears := 2
+@export var multiball_light_clears := 1
 ## How many extra balls multiball puts into play.
 @export var multiball_extra_balls := 2
 ## Where the extra balls are fed in from.
@@ -56,6 +58,7 @@ var _launch_charge := 0.0
 
 var _deck_clears := 0
 var _main_clears := 0
+var _light_clears := 0
 var _multiball := false
 
 
@@ -228,10 +231,14 @@ func _count_toward_multiball(bank: Bank) -> void:
 		_deck_clears += 1
 	elif bank == _main_bank:
 		_main_clears += 1
+	elif bank == _light_bank:
+		_light_clears += 1
 	else:
-		return   # the rollover set doesn't feed multiball
-	GameManager.multiball_progress.emit(_deck_clears, _main_clears)
-	if _deck_clears >= multiball_deck_clears and _main_clears >= multiball_main_clears:
+		return
+	GameManager.multiball_progress.emit(_deck_clears, _main_clears, _light_clears)
+	if _deck_clears >= multiball_deck_clears \
+			and _main_clears >= multiball_main_clears \
+			and _light_clears >= multiball_light_clears:
 		_start_multiball()
 
 
@@ -243,7 +250,8 @@ func _start_multiball() -> void:
 	# and this also stops a clear landing mid-multiball from re-triggering.
 	_deck_clears = 0
 	_main_clears = 0
-	GameManager.multiball_progress.emit(0, 0)
+	_light_clears = 0
+	GameManager.multiball_progress.emit(0, 0, 0)
 	GameManager.multiball_changed.emit(true)
 	SoundManager.play("launch", 1.15)
 	GameManager.impact.emit(14.0)
@@ -266,7 +274,8 @@ func _end_multiball() -> void:
 	_multiball = false
 	_deck_clears = 0
 	_main_clears = 0
-	GameManager.multiball_progress.emit(0, 0)
+	_light_clears = 0
+	GameManager.multiball_progress.emit(0, 0, 0)
 	GameManager.multiball_changed.emit(false)
 
 

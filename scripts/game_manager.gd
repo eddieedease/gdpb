@@ -12,7 +12,7 @@ signal points_scored(points: int, at: Vector2)
 signal bank_completed(at: Vector2)
 ## Progress toward multiball changed, or multiball started/ended. The backbox
 ## legend reads these to show how close the player is.
-signal multiball_progress(deck_clears: int, main_clears: int)
+signal multiball_progress(deck_clears: int, main_clears: int, light_clears: int)
 signal multiball_changed(active: bool)
 
 const NO_POS := Vector2(-99999, -99999)
