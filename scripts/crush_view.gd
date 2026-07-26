@@ -118,6 +118,8 @@ void fragment() {
 ## How deep a drop target's plate is - deliberately thin, it is a standing
 ## card the ball knocks flat, not a block.
 @export var target_thickness := 0.055
+## Deck targets stand taller - they are far up the table and seen steeply.
+@export var deck_target_height := 0.48
 @export var bumper_height := 0.42
 @export var slingshot_height := 0.26
 @export var gate_height := 0.20
@@ -1230,7 +1232,10 @@ func _box(size: Vector3, pos: Vector3, color: Color, emission := 0.0) -> void:
 ## which is what a drop target physically does, and impossible to read from a
 ## flat rectangle that simply blinks out.
 func _build_target_visuals() -> void:
-	for tier in [[_vp_top, 0.0], [_vp_deck, deck_height]]:
+	# The deck's targets get their own, taller height: they sit much further up
+	# the table and are viewed from a steeper angle, so a plate sized for the
+	# main playfield shrinks to a sliver up there.
+	for tier in [[_vp_top, 0.0, target_height], [_vp_deck, deck_height, deck_target_height]]:
 		var vp: SubViewport = tier[0]
 		var base_h: float = tier[1]
 		for t in _descendants(vp):
@@ -1248,7 +1253,7 @@ func _build_target_visuals() -> void:
 				# Claim the flat art, so the target's own reset doesn't turn it
 				# back on underneath the plate we're about to build.
 				t.set_meta("visual_owned_by_3d", true)
-			var height := target_height
+			var height: float = tier[2]
 			var mesh := MeshInstance3D.new()
 			var box := BoxMesh.new()
 			# A drop target is a thin upright PLATE, not a block. Taking the
@@ -1262,16 +1267,56 @@ func _build_target_visuals() -> void:
 			mat.roughness = 0.4
 			mat.emission_enabled = true
 			mat.emission = col
-			mat.emission_energy_multiplier = 0.5
+			mat.emission_energy_multiplier = 0.9
 			mesh.material_override = mat
 			add_child(mesh)
+
+			# A lit cap along the top edge. The upper deck is viewed from a much
+			# steeper angle than the main playfield, where an upright plate
+			# foreshortens to almost nothing - a bright top FACE is the part
+			# still facing the camera up there, and it's what makes the target
+			# readable at all.
+			var cap := MeshInstance3D.new()
+			var cb := BoxMesh.new()
+			cb.size = Vector3(size2.x / PX_PER_M * 1.04, 0.035, target_thickness * 2.2)
+			cap.mesh = cb
+			var capmat := StandardMaterial3D.new()
+			capmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			# Near-white on purpose: a lightened tint of the plate's own colour
+			# barely separated from it. A hot edge reads against any playfield
+			# or deck colour underneath.
+			capmat.albedo_color = col.lightened(0.85)
+			capmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			capmat.emission_enabled = true
+			capmat.emission = col.lightened(0.7)
+			capmat.emission_energy_multiplier = 3.0
+			cap.material_override = capmat
+			cap.position = Vector3(0, height * 0.5, 0)
+			mesh.add_child(cap)
+
+			# A dark socket slot on the floor at the target's base. Real drop
+			# targets sit in a recess, and it gives the plate local contrast
+			# against whatever colour the board or deck happens to be - the deck
+			# floor in particular can be bright enough to swallow a pale target.
+			# NOT parented to the plate: the slot stays put when it drops.
+			var slot := MeshInstance3D.new()
+			var sb := BoxMesh.new()
+			sb.size = Vector3(size2.x / PX_PER_M * 1.18, 0.014, target_thickness * 3.4)
+			slot.mesh = sb
+			var slotmat := StandardMaterial3D.new()
+			slotmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			slotmat.albedo_color = Color(0.04, 0.04, 0.07)
+			slot.material_override = slotmat
+			add_child(slot)
 			# Anchored to the COLLISION shape, not the body: the shape can be
 			# offset from its parent in the editor (moving a target's children
 			# rather than the target itself), and taking the body's position
 			# then floats the block away from where the target really is.
 			var w := _table_to_world(cs.global_position)
+			slot.position = Vector3(w.x, base_h + 0.008, w.z)
+			slot.rotation.y = -cs.global_rotation
 			_targets.append({
-				"node": t, "mesh": mesh, "mat": mat,
+				"node": t, "mesh": mesh, "mat": mat, "capmat": capmat,
 				"xz": Vector2(w.x, w.z),
 				"up_y": base_h + height * 0.5,
 				"down_y": base_h - height * 0.75,
@@ -1829,6 +1874,9 @@ func _process(delta: float) -> void:
 		var k: float = clampf((y - t["down_y"]) / span, 0.0, 1.0)
 		var mat: StandardMaterial3D = t["mat"]
 		mat.albedo_color.a = k
+		var capmat: StandardMaterial3D = t["capmat"]
+		capmat.albedo_color.a = k
+		capmat.emission_energy_multiplier = 3.0 * k
 		if down and k < 0.06:
 			mesh.visible = false
 		else:

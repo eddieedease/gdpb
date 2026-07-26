@@ -63,7 +63,7 @@ script = ExtResource("1_00vba")
 launch_max_speed = 4000.0
 
 [node name="PlayfieldArt" type="Sprite2D" parent="." unique_id=800000010]
-modulate = Color(0.50209415, 0.50209415, 0.50209415, 1)
+modulate = Color(0.027432038, 0.28667977, 0.3507347, 1)
 z_index = -100
 texture_filter = 1
 position = Vector2(110, 112.00001)
@@ -223,7 +223,7 @@ position = Vector2(1107, 1920)
 rotation = -0.12
 
 [node name="ExampleRail" parent="." unique_id=689590988 instance=ExtResource("16_rail")]
-position = Vector2(511, 1633)
+position = Vector2(511, 1545)
 rotation = -1.0062875
 scale = Vector2(1.0395514, 1.1361759)
 curve = SubResource("Curve2D_jqx0o")

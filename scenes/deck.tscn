@@ -15,7 +15,7 @@ size = Vector2(64, 34)
 [node name="DeckBounds" type="Polygon2D" parent="." unique_id=1223689232]
 position = Vector2(-35.318134, 0)
 scale = Vector2(1.0367132, 1)
-color = Color(0.7852562, 0.82932526, 0.9058242, 0.92156863)
+color = Color(0.8428533, 0.8534456, 0.47681338, 0.92156863)
 polygon = PackedVector2Array(390, 440, 652.60876, 439.99994, 890, 440, 962, 624, 890, 810, 390, 810, 337.9123, 617)
 
 [node name="DeckFlipperLeft" parent="." unique_id=497919988 instance=ExtResource("1_fl")]
