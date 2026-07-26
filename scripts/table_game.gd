@@ -119,17 +119,23 @@ func _get_ball() -> RigidBody2D:
 
 
 func _physics_process(delta: float) -> void:
+	# Safety net: a ball that escaped the table - stranded on a ramp or deck
+	# layer, or punched clean through a wall - must never be lost off-screen.
+	# This checks EVERY ball: it used to look at _get_ball() only, so during
+	# multiball the second and third balls had no safety net at all and could
+	# quietly disappear.
+	for b in get_tree().get_nodes_in_group("ball"):
+		if not is_instance_valid(b) or not _out_of_bounds(b):
+			continue
+		b.collision_layer = 1
+		b.collision_mask = 1
+		b.z_index = 0
+		b.set_meta("on_ramp", false)
+		b.set_meta("on_deck", false)
+		_on_drain_body_entered(b)
+
 	var ball := _get_ball()
 	if ball == null:
-		return
-	# Safety net: a ball that escaped the table (e.g. stranded on a ramp layer)
-	# must never be lost off-screen. Restore normal collision and drain it.
-	if _out_of_bounds(ball):
-		ball.collision_layer = 1
-		ball.collision_mask = 1
-		ball.z_index = 0
-		ball.set_meta("on_ramp", false)
-		_on_drain_body_entered(ball)
 		return
 	if Input.is_action_just_pressed("nudge_left"):
 		_nudge(-1.0)
@@ -154,9 +160,14 @@ func _nudge(dir: float) -> void:
 		cam.shake(11.0)
 
 
+## Outside the playable area. The margin is deliberately tight around the wall
+## perimeter (walls run x 110..1170): the old test only fired once the ball was
+## right off the 1280x2560 board, so a ball that punched through a side wall and
+## came to rest in the dead space beyond it was never caught and simply sat
+## there, out of play.
 func _out_of_bounds(ball: RigidBody2D) -> bool:
 	var p := ball.global_position
-	return p.x < -80.0 or p.x > 1360.0 or p.y < -80.0 or p.y > 2640.0
+	return p.x < 55.0 or p.x > 1235.0 or p.y < 55.0 or p.y > 2620.0
 
 
 func _on_drain_body_entered(body: Node) -> void:

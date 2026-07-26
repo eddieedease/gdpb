@@ -33,28 +33,36 @@ const DECK_BIT := 1 << 8
 const APRON_SHADER := "
 shader_type canvas_item;
 uniform vec3 base_color;
-uniform vec3 stripe_a;
-uniform vec3 stripe_b;
-uniform vec3 stripe_c;
+uniform vec3 rim_color;
+uniform vec3 sheen_color;
 uniform vec2 table_size;
 uniform vec4 art_rect;   // x, y, w, h in table pixels; zero = no artwork
 void fragment() {
 	vec2 p = UV * table_size;
-	float d = UV.x * 1.3 + UV.y * 3.1;
-	float s = fract(d * 5.0);
-	float band = smoothstep(0.0, 0.08, s) * smoothstep(0.52, 0.44, s);
-	float w = fract(d * 1.666);
-	vec3 stripe = w < 0.333 ? stripe_a : (w < 0.666 ? stripe_b : stripe_c);
-	// Fade the stripes out UNDER the playfield artwork. The art is
-	// semi-transparent, so whatever is painted below shows through it - left
-	// unmasked, the stripes read as running straight across the picture.
+	// How far inside the artwork this pixel is, and a soft mask for it. The art
+	// is semi-transparent, so anything drawn under it shows through - the apron
+	// must fade to a plain base there or it reads as painted over the picture.
 	vec2 inset = min(p - art_rect.xy, art_rect.xy + art_rect.zw - p);
 	vec2 fade = smoothstep(vec2(0.0), vec2(70.0), inset);
 	float under_art = fade.x * fade.y;
 	float show = 1.0 - under_art;
-	vec3 col = mix(base_color, stripe, band * 0.30 * show);
-	// a gentle sheen down the length so it is not perfectly uniform
-	col *= 1.0 + 0.10 * sin(UV.y * 6.2831) * show;
+
+	// Clean graded surface rather than stripes: lighter at the top of the
+	// table, settling darker toward the player.
+	vec3 col = mix(base_color, base_color * 0.78, smoothstep(0.0, 1.0, UV.y));
+
+	// Backlit trim hugging the playfield edge - the apron reads as a lit
+	// surround instead of decorated flooring.
+	float edge = min(inset.x, inset.y);
+	float rim = exp(-abs(edge) / 46.0);
+	col += rim_color * rim * 0.55 * show;
+
+	// A slow sheen travelling the length of the cabinet, so the surround is
+	// alive without any pattern to look at.
+	float t = fract((UV.y * 0.72 + UV.x * 0.28) - TIME * 0.055);
+	float band = smoothstep(0.0, 0.06, t) * smoothstep(0.30, 0.12, t);
+	col += sheen_color * band * 0.14 * show;
+
 	COLOR = vec4(col, 1.0);
 }
 "
@@ -194,9 +202,9 @@ func _ready() -> void:
 
 	var table := _vp.get_node("Table")
 
-	# The board under everything - it shows in the apron, the margin the
-	# playfield artwork doesn't reach. Flat grey there read as unfinished, so
-	# it gets soft diagonal poolside stripes in the table's accents instead.
+	# The surround under everything - it shows in the apron, the margin the
+	# playfield artwork does not reach. See APRON_SHADER for what is drawn there.
+
 	# Its z_index MUST stay below the art's (PlayfieldArt sits at -100):
 	# being merely first in tree order is not enough, since z_index wins over
 	# tree order and a z=0 rect would paint straight over a z=-100 sprite.
@@ -209,9 +217,8 @@ func _ready() -> void:
 	var apron_mat := ShaderMaterial.new()
 	apron_mat.shader = apron_sh
 	apron_mat.set_shader_parameter("base_color", _v3(board_color))
-	apron_mat.set_shader_parameter("stripe_a", _v3(accent_warm))
-	apron_mat.set_shader_parameter("stripe_b", _v3(accent_cool))
-	apron_mat.set_shader_parameter("stripe_c", _v3(accent_bright))
+	apron_mat.set_shader_parameter("rim_color", _v3(accent_cool))
+	apron_mat.set_shader_parameter("sheen_color", _v3(accent_bright))
 	apron_mat.set_shader_parameter("table_size", TABLE_SIZE)
 	apron_mat.set_shader_parameter("art_rect", _playfield_art_rect(table))
 	surface.material = apron_mat
@@ -1035,12 +1042,14 @@ func _build_cabinet() -> void:
 ## a painted-on decoration.
 func _build_backbox_display(l: float) -> void:
 	var face_z := -(l * 0.5 + 0.44)
-	_backbox_label(backbox_title, 88, accent_bright, Vector3(0, 3.15, face_z))
-	_score_label = _backbox_label("0", 150, Color(1, 0.97, 0.92), Vector3(0, 2.05, face_z))
-	_balls_label = _backbox_label("BALLS 3", 54, accent_cool, Vector3(0, 1.16, face_z))
-	# The multiball legend: shows how close the player is to lighting it, then
-	# takes over entirely while it is running.
-	_multiball_label = _backbox_label("", 46, accent_warm, Vector3(0, 0.52, face_z))
+	_backbox_label(backbox_title, 78, accent_bright, Vector3(0, 3.32, face_z))
+	_score_label = _backbox_label("0", 142, Color(1, 0.97, 0.92), Vector3(0, 2.18, face_z))
+	# Balls and the multiball legend share ONE line well below the score, both
+	# small: stacked on separate lines they crowded the score badly. Kept as two
+	# labels rather than one string so each keeps its own colour, laid out left
+	# and right of centre.
+	_balls_label = _backbox_label("BALLS 3", 40, accent_cool, Vector3(-4.35, 1.06, face_z))
+	_multiball_label = _backbox_label("", 40, accent_warm, Vector3(1.15, 1.06, face_z))
 	GameManager.score_changed.connect(_on_score_changed)
 	GameManager.balls_changed.connect(_on_balls_changed)
 	GameManager.multiball_progress.connect(_on_multiball_progress)

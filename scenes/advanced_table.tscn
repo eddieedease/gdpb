@@ -17,7 +17,7 @@
 [ext_resource type="PackedScene" path="res://scenes/ramp.tscn" id="20_ramp"]
 [ext_resource type="PackedScene" uid="uid://cn11w5wrtl65i" path="res://scenes/deck.tscn" id="21_deck"]
 [ext_resource type="PackedScene" uid="uid://bqr7v2xk1mnop" path="res://scenes/rollover.tscn" id="23_rollover"]
-[ext_resource type="PackedScene" path="res://scenes/spinner.tscn" id="24_spinner"]
+[ext_resource type="PackedScene" uid="uid://ckq4n8sp2vwsa" path="res://scenes/spinner.tscn" id="24_spinner"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_a0uye"]
 size = Vector2(64, 34)
@@ -31,19 +31,19 @@ size = Vector2(1280, 80)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_dqafr"]
 size = Vector2(1280, 2560)
 
-[sub_resource type="Curve2D" id="Curve2D_jqx0o"]
+[sub_resource type="Curve2D" id="Curve2D_ai1wt"]
 resource_local_to_scene = true
 _data = {
 "points": PackedVector2Array(0, 0, 0, 0, -189.11853, 131.45166, 0, 0, 0, 0, 385.9568, -251.7492, -104.75783, 57.57081, 104.75783, -57.57081, 517.2638, -335.12024, 125.576096, -70.971634, -125.576096, 70.971634, 684.14417, -89.06592, 0, 0, 0, 0, -83.04785, 292.9348)
 }
 point_count = 5
 
-[sub_resource type="Curve2D" id="Curve2D_ai1wt"]
+[sub_resource type="Curve2D" id="Curve2D_tgrry"]
 resource_local_to_scene = true
 _data = {
-"points": PackedVector2Array(0, 0, 0, 0, 117.737915, 51.601837, 0, 0, 220.1721, 2.7764497, 677.0594, 57.994995, 39.796906, -241.75021, -39.796906, 241.75021, 1139.8567, 226.8228)
+"points": PackedVector2Array(0, 0, 0, 0, 117.737915, 51.601837, 125.7499, -413.53815, -125.7499, 413.53815, 1139.8567, 226.8228)
 }
-point_count = 3
+point_count = 2
 
 [sub_resource type="ShaderMaterial" id="shader_vignette"]
 shader = ExtResource("18_vignette")
@@ -230,7 +230,7 @@ rotation = -0.12
 position = Vector2(511.00006, 1545)
 rotation = -1.0062875
 scale = Vector2(1.0395514, 1.1361759)
-curve = SubResource("Curve2D_jqx0o")
+curve = SubResource("Curve2D_ai1wt")
 channel_width = 50.0
 mouth_flare = 0.885
 smoothness = 2.982
@@ -240,7 +240,7 @@ centering = 8.0
 [node name="Rail" parent="." unique_id=470856065 instance=ExtResource("16_rail")]
 position = Vector2(215.99998, 1345)
 rotation = -1.5759021
-curve = SubResource("Curve2D_ai1wt")
+curve = SubResource("Curve2D_tgrry")
 
 [node name="Ambiance" type="CanvasLayer" parent="." unique_id=692629535]
 layer = 5
