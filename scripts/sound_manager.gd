@@ -9,6 +9,7 @@ const SFX := {
 	"slingshot": preload("res://assets/sounds/sfx_slingshot.wav"),
 	"target": preload("res://assets/sounds/sfx_target.wav"),
 	"drop": preload("res://assets/sounds/sfx_drop.wav"),
+	"spinner": preload("res://assets/sounds/sfx_spinner.wav"),
 	"launch": preload("res://assets/sounds/sfx_launch.wav"),
 	"whoosh": preload("res://assets/sounds/sfx_whoosh.wav"),
 	"drain": preload("res://assets/sounds/sfx_drain.wav"),

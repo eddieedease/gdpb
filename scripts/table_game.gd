@@ -43,6 +43,21 @@ var _deck_bank := Bank.new()
 var _light_bank := Bank.new()
 var _launch_charge := 0.0
 
+## Multiball is lit by clearing the DECK bank twice and the LOWER bank three
+## times. Progress only accumulates while multiball is INACTIVE - clears made
+## during multiball count for nothing - and both counters go back to zero when
+## it ends, so each multiball has to be earned from scratch.
+@export var multiball_deck_clears := 2
+@export var multiball_main_clears := 3
+## How many extra balls multiball puts into play.
+@export var multiball_extra_balls := 2
+## Where the extra balls are fed in from.
+@export var multiball_feed_position := Vector2(640, 300)
+
+var _deck_clears := 0
+var _main_clears := 0
+var _multiball := false
+
 
 func _ready() -> void:
 	# Widescreen, fill the whole width (the Classic table switches the window to
@@ -147,8 +162,18 @@ func _out_of_bounds(ball: RigidBody2D) -> bool:
 func _on_drain_body_entered(body: Node) -> void:
 	if not body.is_in_group("ball"):
 		return
+	# Count what is STILL in play before freeing this one. During multiball,
+	# losing one ball costs nothing - only draining the last ball ends the
+	# ball-in-play, or every multiball would cost two extra lives.
+	var others := _live_balls(body)
 	body.queue_free()
 	SoundManager.play("drain")
+	if others > 0:
+		# Down to a single ball again: multiball is over.
+		if others == 1:
+			_end_multiball()
+		return
+	_end_multiball()
 	GameManager.lose_ball()
 	if not GameManager.is_game_over:
 		await get_tree().create_timer(0.9).timeout
@@ -183,6 +208,66 @@ func _bank_centre(bank: Bank) -> Vector2:
 	return sum / maxi(count, 1)
 
 
+## Bank clears build toward multiball, but ONLY while it is inactive - during
+## multiball a clear earns its bonus and nothing more.
+func _count_toward_multiball(bank: Bank) -> void:
+	if _multiball:
+		return
+	if bank == _deck_bank:
+		_deck_clears += 1
+	elif bank == _main_bank:
+		_main_clears += 1
+	else:
+		return   # the rollover set doesn't feed multiball
+	GameManager.multiball_progress.emit(_deck_clears, _main_clears)
+	if _deck_clears >= multiball_deck_clears and _main_clears >= multiball_main_clears:
+		_start_multiball()
+
+
+func _start_multiball() -> void:
+	if _multiball:
+		return
+	_multiball = true
+	# Zero the counters now: the next multiball has to be earned from scratch,
+	# and this also stops a clear landing mid-multiball from re-triggering.
+	_deck_clears = 0
+	_main_clears = 0
+	GameManager.multiball_progress.emit(0, 0)
+	GameManager.multiball_changed.emit(true)
+	SoundManager.play("launch", 1.15)
+	GameManager.impact.emit(14.0)
+	# Feed the extra balls in over a beat so they don't all appear on top of
+	# each other, and from the top of the playfield so they immediately matter.
+	for i in multiball_extra_balls:
+		await get_tree().create_timer(0.35).timeout
+		if not is_inside_tree() or GameManager.is_game_over:
+			return
+		var extra: RigidBody2D = BALL_SCENE.instantiate()
+		extra.position = multiball_feed_position + Vector2(randf_range(-40.0, 40.0), 0.0)
+		extra.max_contacts_reported = 10
+		add_child(extra)
+		extra.linear_velocity = Vector2(randf_range(-160.0, 160.0), 380.0)
+
+
+func _end_multiball() -> void:
+	if not _multiball:
+		return
+	_multiball = false
+	_deck_clears = 0
+	_main_clears = 0
+	GameManager.multiball_progress.emit(0, 0)
+	GameManager.multiball_changed.emit(false)
+
+
+## Balls currently in play, ignoring any that are already queued for deletion.
+func _live_balls(excluding: Node = null) -> int:
+	var n := 0
+	for b in get_tree().get_nodes_in_group("ball"):
+		if is_instance_valid(b) and b != excluding:
+			n += 1
+	return n
+
+
 func _on_drop_hit(_target, bank: Bank) -> void:
 	bank.down += 1
 	if bank.down >= bank.targets.size() and not bank.resetting:
@@ -192,6 +277,7 @@ func _on_drop_hit(_target, bank: Bank) -> void:
 		# Celebrate over the middle of the whole group, not the last piece hit,
 		# so the burst reads as "that set is cleared".
 		GameManager.bank_completed.emit(_bank_centre(bank))
+		_count_toward_multiball(bank)
 		await get_tree().create_timer(1.2).timeout
 		for d in bank.targets:
 			d.reset_target()
@@ -209,4 +295,5 @@ func _unhandled_input(event: InputEvent) -> void:
 				d.reset_target()
 			bank.down = 0
 			bank.resetting = false
+		_end_multiball()
 		_spawn_ball()

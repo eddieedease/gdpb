@@ -288,12 +288,11 @@ func _on_mouth_entered(body: Node, inward: Vector2, mouth_pos: Vector2) -> void:
 	body.set_meta("channel_entry_off", curve.get_closest_offset(to_local(body.global_position)))
 	if not _riding.has(body):
 		_riding.append(body)
-	# Whoosh only on a committed shot (fast enough to carry through), with a
-	# short cooldown so hovering around the mouth can't re-trigger it.
-	var now := Time.get_ticks_msec()
-	if speed >= whoosh_min_speed and now - _last_whoosh_ms > 450:
-		_last_whoosh_ms = now
-		SoundManager.play("whoosh", lerpf(0.95, 1.2, clampf((speed - whoosh_min_speed) / 1600.0, 0.0, 1.0)))
+	# The whoosh is NOT played here. Boarding is not the same as riding: a ball
+	# that clips a mouth and backs straight out still boarded, so playing it on
+	# entry produced a whoosh for shots that never actually went anywhere. It
+	# fires from _physics_process once the ball is genuinely half way along.
+	body.set_meta("channel_whooshed", false)
 	# NOTE: no score here. A channel pays out for being RIDDEN END TO END, which
 	# is the shot worth making - see _release(). Scoring on entry paid out for
 	# merely nudging a mouth.
@@ -374,6 +373,17 @@ func _physics_process(delta: float) -> void:
 		# and is released instantly - which is exactly why shooting a rail
 		# from one end worked and from the other end did nothing at all.
 		var entry_off: float = ball.get_meta("channel_entry_off", 0.0)
+		# Whoosh once the ball is genuinely half way along - proof it committed
+		# to the shot rather than just brushing a mouth. Gated on speed and a
+		# short cooldown as before.
+		if not ball.get_meta("channel_whooshed", true) \
+				and absf(off - entry_off) >= length * 0.5:
+			ball.set_meta("channel_whooshed", true)
+			var now := Time.get_ticks_msec()
+			if speed >= whoosh_min_speed and now - _last_whoosh_ms > 450:
+				_last_whoosh_ms = now
+				SoundManager.play("whoosh",
+						lerpf(0.95, 1.2, clampf((speed - whoosh_min_speed) / 1600.0, 0.0, 1.0)))
 		var end_margin := minf(4.0, length * 0.1)
 		if absf(off - entry_off) > 30.0 and (off <= end_margin or off >= length - end_margin):
 			_release(ball)

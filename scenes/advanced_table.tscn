@@ -17,6 +17,7 @@
 [ext_resource type="PackedScene" path="res://scenes/ramp.tscn" id="20_ramp"]
 [ext_resource type="PackedScene" uid="uid://cn11w5wrtl65i" path="res://scenes/deck.tscn" id="21_deck"]
 [ext_resource type="PackedScene" uid="uid://bqr7v2xk1mnop" path="res://scenes/rollover.tscn" id="23_rollover"]
+[ext_resource type="PackedScene" path="res://scenes/spinner.tscn" id="24_spinner"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_a0uye"]
 size = Vector2(64, 34)
@@ -193,6 +194,9 @@ position = Vector2(220, 1447)
 modulate = Color(0.6666667, 0, 0.3372549, 1)
 position = Vector2(1005, 1500)
 
+[node name="Spinner" parent="." unique_id=800000020 instance=ExtResource("24_spinner")]
+position = Vector2(640, 1560)
+
 [node name="RolloverLight0" parent="." unique_id=1968767991 instance=ExtResource("23_rollover")]
 position = Vector2(429, 1709)
 
@@ -223,7 +227,7 @@ position = Vector2(1107, 1920)
 rotation = -0.12
 
 [node name="ExampleRail" parent="." unique_id=689590988 instance=ExtResource("16_rail")]
-position = Vector2(511, 1545)
+position = Vector2(511.00006, 1545)
 rotation = -1.0062875
 scale = Vector2(1.0395514, 1.1361759)
 curve = SubResource("Curve2D_jqx0o")

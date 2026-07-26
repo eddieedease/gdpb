@@ -123,6 +123,7 @@ void fragment() {
 @export var bumper_height := 0.42
 @export var slingshot_height := 0.26
 @export var gate_height := 0.20
+@export var spinner_height := 0.19
 ## Drop shadows: each tier is drawn a second time on the table surface,
 ## darkened and offset. The offset direction follows the CAMERA each frame
 ## (shadows fall toward the viewer), so the perspective reads correctly as
@@ -166,8 +167,15 @@ var _floaters: Array = []     # background neon shapes; see _build_floating_shap
 var _elapsed := 0.0
 var _score_label: Label3D
 var _balls_label: Label3D
+var _multiball_label: Label3D
+var _multiball_lit := false
+var _multiball_tween: Tween
+## Mirrors table_game's multiball requirements, purely for the legend text.
+const MULTIBALL_DECK_TARGET := 2
+const MULTIBALL_MAIN_TARGET := 3
 var _targets: Array = []      # drop-target blocks; see _build_target_visuals
 var _lights: Array = []       # rollover discs; see _build_rollover_visuals
+var _spinners: Array = []   # spinner blades; see _build_spinner_visuals
 ## Table-space footprint of the upper deck (padded bounding box of its
 ## content). Defines where the cage walls go and how far a ball must fall
 ## past the deck flippers before it rejoins the playfield below.
@@ -271,6 +279,7 @@ func _ready() -> void:
 	_build_kicker_visuals()
 	_build_gate_visuals(table)
 	_build_rollover_visuals()
+	_build_spinner_visuals()
 	_build_deck_platform()
 	_build_deck_cage(table)
 	_build_environment()
@@ -1027,12 +1036,18 @@ func _build_cabinet() -> void:
 func _build_backbox_display(l: float) -> void:
 	var face_z := -(l * 0.5 + 0.44)
 	_backbox_label(backbox_title, 88, accent_bright, Vector3(0, 3.15, face_z))
-	_score_label = _backbox_label("0", 150, Color(1, 0.97, 0.92), Vector3(0, 1.95, face_z))
-	_balls_label = _backbox_label("BALLS 3", 58, accent_cool, Vector3(0, 0.92, face_z))
+	_score_label = _backbox_label("0", 150, Color(1, 0.97, 0.92), Vector3(0, 2.05, face_z))
+	_balls_label = _backbox_label("BALLS 3", 54, accent_cool, Vector3(0, 1.16, face_z))
+	# The multiball legend: shows how close the player is to lighting it, then
+	# takes over entirely while it is running.
+	_multiball_label = _backbox_label("", 46, accent_warm, Vector3(0, 0.52, face_z))
 	GameManager.score_changed.connect(_on_score_changed)
 	GameManager.balls_changed.connect(_on_balls_changed)
+	GameManager.multiball_progress.connect(_on_multiball_progress)
+	GameManager.multiball_changed.connect(_on_multiball_changed)
 	_on_score_changed(GameManager.score)
 	_on_balls_changed(GameManager.balls_left)
+	_on_multiball_progress(0, 0)
 
 
 func _backbox_label(text: String, size: int, col: Color, pos: Vector3) -> Label3D:
@@ -1064,6 +1079,32 @@ func _on_score_changed(value: int) -> void:
 func _on_balls_changed(value: int) -> void:
 	if is_instance_valid(_balls_label):
 		_balls_label.text = "BALLS %d" % maxi(value, 0)
+
+
+## Legend on the backbox. While multiball is off it counts the two banks toward
+## lighting it; while it runs it just says so, pulsing, and stops counting.
+func _on_multiball_progress(deck_clears: int, main_clears: int) -> void:
+	if not is_instance_valid(_multiball_label) or _multiball_lit:
+		return
+	_multiball_label.modulate = accent_warm
+	_multiball_label.text = "MULTIBALL   DECK %d/%d   BANK %d/%d" % [
+			deck_clears, MULTIBALL_DECK_TARGET, main_clears, MULTIBALL_MAIN_TARGET]
+
+
+func _on_multiball_changed(active: bool) -> void:
+	_multiball_lit = active
+	if not is_instance_valid(_multiball_label):
+		return
+	if _multiball_tween and _multiball_tween.is_valid():
+		_multiball_tween.kill()
+	if active:
+		_multiball_label.text = "*  M U L T I B A L L  *"
+		_multiball_label.modulate = accent_bright
+		_multiball_tween = create_tween().set_loops()
+		_multiball_tween.tween_property(_multiball_label, "modulate", accent_warm, 0.35)
+		_multiball_tween.tween_property(_multiball_label, "modulate", accent_bright, 0.35)
+	else:
+		_on_multiball_progress(0, 0)
 
 
 ## 1234500 -> "1,234,500" - a bare digit run is unreadable at a glance.
@@ -1313,6 +1354,10 @@ func _build_target_visuals() -> void:
 			# rather than the target itself), and taking the body's position
 			# then floats the block away from where the target really is.
 			var w := _table_to_world(cs.global_position)
+			# Start standing, not at the origin: animating up from y=0 on the
+			# first frames tripped the sinking branch above and left the plate
+			# permanently alpha-blended.
+			mesh.position = Vector3(w.x, base_h + height * 0.5, w.z)
 			slot.position = Vector3(w.x, base_h + 0.008, w.z)
 			slot.rotation.y = -cs.global_rotation
 			_targets.append({
@@ -1600,6 +1645,60 @@ func _build_rollover_visuals() -> void:
 		_lights.append({"node": r, "mat": mat, "ring": ring})
 
 
+## Spinners: a real blade on two posts, turning on a horizontal axle across the
+## lane. The blade's angle is driven from the spinner node itself each frame, so
+## what you see spinning is exactly what is being scored.
+func _build_spinner_visuals() -> void:
+	for s in get_tree().get_nodes_in_group("spinners"):
+		if not (s is Node2D) or s.get("spin") == null:
+			continue
+		var w := _table_to_world(s.global_position)
+		var span: float = float(s.width) / PX_PER_M
+		var root := Node3D.new()
+		root.position = Vector3(w.x, 0.0, w.z)
+		root.rotation.y = -s.global_rotation
+		add_child(root)
+
+		# The axle sits at blade height; the blade hangs across the lane and
+		# rotates about the axle's own length.
+		var axle_y := spinner_height
+		var pivot := Node3D.new()
+		pivot.position = Vector3(0, axle_y, 0)
+		root.add_child(pivot)
+
+		var blade := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(span * 0.92, axle_y * 1.7, 0.022)
+		blade.mesh = bm
+		var bmat := StandardMaterial3D.new()
+		bmat.albedo_color = accent_bright
+		bmat.metallic = 0.6
+		bmat.roughness = 0.25
+		bmat.emission_enabled = true
+		bmat.emission = accent_bright
+		bmat.emission_energy_multiplier = 0.7
+		bmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		blade.material_override = bmat
+		pivot.add_child(blade)
+
+		for side in [-1.0, 1.0]:
+			var post := MeshInstance3D.new()
+			var pm := CylinderMesh.new()
+			pm.top_radius = 0.022
+			pm.bottom_radius = 0.026
+			pm.height = axle_y * 1.25
+			post.mesh = pm
+			var pmat := StandardMaterial3D.new()
+			pmat.albedo_color = rail_color.lightened(0.4)
+			pmat.metallic = 0.5
+			pmat.roughness = 0.3
+			post.material_override = pmat
+			post.position = Vector3(side * span * 0.5, axle_y * 0.62, 0)
+			root.add_child(post)
+
+		_spinners.append({"node": s, "pivot": pivot, "mat": bmat})
+
+
 ## A point on the tube wall: `ang` sweeps around the channel's centreline,
 ## 0 = outward along the horizontal normal, PI/2 = straight up.
 func _tube_pt(centre: Vector3, side: Vector3, lift: Vector3, r: float, ang: float) -> Vector3:
@@ -1873,16 +1972,32 @@ func _process(delta: float) -> void:
 		var span: float = maxf(t["up_y"] - t["down_y"], 0.001)
 		var k: float = clampf((y - t["down_y"]) / span, 0.0, 1.0)
 		var mat: StandardMaterial3D = t["mat"]
-		mat.albedo_color.a = k
 		var capmat: StandardMaterial3D = t["capmat"]
-		capmat.albedo_color.a = k
+		# Alpha-blend ONLY while the plate is actually sinking. Once it latched
+		# onto an alpha material it stayed there, and an alpha-blended surface
+		# stops writing depth - so the board underneath blended straight through
+		# the plate and the deck's colour appeared to bleed into the target.
+		var sinking := k < 0.995
+		var want := BaseMaterial3D.TRANSPARENCY_ALPHA if sinking else BaseMaterial3D.TRANSPARENCY_DISABLED
+		if mat.transparency != want:
+			mat.transparency = want
+			capmat.transparency = want
+		mat.albedo_color.a = k if sinking else 1.0
+		capmat.albedo_color.a = k if sinking else 1.0
 		capmat.emission_energy_multiplier = 3.0 * k
-		if down and k < 0.06:
-			mesh.visible = false
-		else:
-			mesh.visible = true
-			if mat.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED and k < 0.99:
-				mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mesh.visible = not (down and k < 0.06)
+
+	# Spinner blades, driven straight off each spinner's own angle so the
+	# visual can never drift from what is being scored. They also glow hotter
+	# the faster they are turning.
+	for sp in _spinners:
+		var node = sp["node"]
+		var pivot: Node3D = sp["pivot"]
+		if not is_instance_valid(node) or not is_instance_valid(pivot):
+			continue
+		pivot.rotation.x = float(node.angle) * TAU
+		var mat: StandardMaterial3D = sp["mat"]
+		mat.emission_energy_multiplier = 0.7 + clampf(float(node.spin) / 8.0, 0.0, 1.0) * 2.2
 
 	# Rollover lights: dark when idle, blazing when lit.
 	for lg in _lights:
