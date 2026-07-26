@@ -157,6 +157,11 @@ void fragment() {
 ## How far toward the player the camera is allowed to trail, in metres from the
 ## table centre. Lower = it hangs back less when the ball is at the bottom.
 @export var camera_near_limit := 9.5
+## Multiball pulls the camera out to take in the whole table, then eases back to
+## tracking once it is down to one ball again.
+@export var multiball_camera_height := 19.0
+@export var multiball_camera_back := 19.0
+@export var multiball_zoom_time := 1.1
 @export var follow_speed := 6.0
 @export var camera_fov := 52.0
 
@@ -173,16 +178,23 @@ var _ball_fx := {}            # ball instance_id -> {sphere, blob, blob_mat, lif
 var _flippers: Array = []     # [flipper Node2D, MeshInstance3D, base_height]
 var _floaters: Array = []     # background neon shapes; see _build_floating_shapes
 var _elapsed := 0.0
+var _wide := 0.0   # 0 = tracking the ball, 1 = pulled out for multiball
 var _score_label: Label3D
 var _balls_label: Label3D
 var _multiball_label: Label3D
 var _multiball_lit := false
+var _cond_labels: Array[Label3D] = []
 var _multiball_tween: Tween
 var _pause_menu: CanvasLayer
 ## Mirrors table_game's multiball requirements, purely for the legend text.
 const MULTIBALL_DECK_TARGET := 1
 const MULTIBALL_MAIN_TARGET := 2
 const MULTIBALL_LIGHT_TARGET := 1
+## Status-line layout: x positions for the three condition labels, the colour a
+## met condition turns, and the third condition.s own hue.
+const COND_X := [-1.75, 1.15, 4.05]
+const COND_DONE_COLOR := Color(0.35, 1.0, 0.48)
+const COND_LANES_COLOR := Color(0.72, 0.62, 1.0)
 var _targets: Array = []      # drop-target blocks; see _build_target_visuals
 var _lights: Array = []       # rollover discs; see _build_rollover_visuals
 var _spinners: Array = []   # spinner blades; see _build_spinner_visuals
@@ -1056,12 +1068,18 @@ func _build_backbox_display(l: float) -> void:
 	var face_z := -(l * 0.5 + 0.44)
 	_backbox_label(backbox_title, 78, accent_bright, Vector3(0, 3.32, face_z))
 	_score_label = _backbox_label("0", 142, Color(1, 0.97, 0.92), Vector3(0, 2.18, face_z))
-	# Balls and the multiball legend share ONE line well below the score, both
-	# small: stacked on separate lines they crowded the score badly. Kept as two
-	# labels rather than one string so each keeps its own colour, laid out left
-	# and right of centre.
-	_balls_label = _backbox_label("BALLS 3", 40, accent_cool, Vector3(-4.35, 1.06, face_z))
-	_multiball_label = _backbox_label("", 40, accent_warm, Vector3(1.15, 1.06, face_z))
+	# The status line is built from SEPARATE labels rather than one string, so
+	# every item carries its own colour and each multiball condition can turn
+	# green on its own once it is met. Small and widely spaced - crammed
+	# together as one string it read as a wall of text under the score.
+	_balls_label = _backbox_label("BALLS 3", 34, accent_cool, Vector3(-4.55, 1.02, face_z))
+	_cond_labels.clear()
+	for i in COND_X.size():
+		_cond_labels.append(_backbox_label("", 34, accent_warm,
+				Vector3(COND_X[i], 1.02, face_z)))
+	# Sits over the condition labels and replaces them while multiball runs.
+	_multiball_label = _backbox_label("", 42, accent_bright, Vector3(1.15, 1.02, face_z))
+	_multiball_label.visible = false
 	GameManager.score_changed.connect(_on_score_changed)
 	GameManager.balls_changed.connect(_on_balls_changed)
 	GameManager.multiball_progress.connect(_on_multiball_progress)
@@ -1102,22 +1120,26 @@ func _on_balls_changed(value: int) -> void:
 		_balls_label.text = "BALLS %d" % maxi(value, 0)
 
 
-## Legend on the backbox. While multiball is off it counts the three groups
-## toward lighting it; while it runs it just says so, pulsing, and stops
-## counting. A group that is already done shows a tick instead of a fraction, so
-## what is still outstanding reads at a glance.
+## The three multiball conditions, one label each. A condition that is met
+## reads "OK" in green; the rest keep their own colour and show a fraction.
+## Called with zeroes when multiball ends, which is also what puts the colours
+## back to un-met.
 func _on_multiball_progress(deck_clears: int, main_clears: int, light_clears: int) -> void:
-	if not is_instance_valid(_multiball_label) or _multiball_lit:
+	if _cond_labels.is_empty() or _multiball_lit:
 		return
-	_multiball_label.modulate = accent_warm
-	_multiball_label.text = "MULTIBALL  %s %s %s" % [
-			_leg("DECK", deck_clears, MULTIBALL_DECK_TARGET),
-			_leg("BANK", main_clears, MULTIBALL_MAIN_TARGET),
-			_leg("LANES", light_clears, MULTIBALL_LIGHT_TARGET)]
-
-
-func _leg(name_: String, got: int, needed: int) -> String:
-	return "%s OK" % name_ if got >= needed else "%s %d/%d" % [name_, got, needed]
+	var specs := [
+		["DECK", deck_clears, MULTIBALL_DECK_TARGET, accent_warm],
+		["BANK", main_clears, MULTIBALL_MAIN_TARGET, accent_bright],
+		["LANES", light_clears, MULTIBALL_LIGHT_TARGET, COND_LANES_COLOR],
+	]
+	for i in _cond_labels.size():
+		var lbl: Label3D = _cond_labels[i]
+		if not is_instance_valid(lbl):
+			continue
+		var spec: Array = specs[i]
+		var done: bool = int(spec[1]) >= int(spec[2])
+		lbl.text = ("%s OK" % spec[0]) if done else ("%s %d/%d" % [spec[0], spec[1], spec[2]])
+		lbl.modulate = COND_DONE_COLOR if done else spec[3]
 
 
 func _on_multiball_changed(active: bool) -> void:
@@ -1126,6 +1148,13 @@ func _on_multiball_changed(active: bool) -> void:
 		return
 	if _multiball_tween and _multiball_tween.is_valid():
 		_multiball_tween.kill()
+	# The banner replaces the three condition labels rather than sitting beside
+	# them - they stop counting while multiball runs, so leaving them up would
+	# just be stale numbers.
+	for lbl in _cond_labels:
+		if is_instance_valid(lbl):
+			lbl.visible = not active
+	_multiball_label.visible = active
 	if active:
 		_multiball_label.text = "*  M U L T I B A L L  *"
 		_multiball_label.modulate = accent_bright
@@ -1133,6 +1162,7 @@ func _on_multiball_changed(active: bool) -> void:
 		_multiball_tween.tween_property(_multiball_label, "modulate", accent_warm, 0.35)
 		_multiball_tween.tween_property(_multiball_label, "modulate", accent_bright, 0.35)
 	else:
+		# Also what resets the green "OK" colours back to un-met.
 		_on_multiball_progress(0, 0, 0)
 
 
@@ -2082,12 +2112,23 @@ func _process(delta: float) -> void:
 	# applies just as much when you are actually playing them.
 	var follow_z := clampf(b.z, -TABLE_SIZE.y * 0.5 / PX_PER_M, camera_near_limit)
 
-	var target := Vector3(b.x, camera_height, follow_z + camera_back)
+	# During multiball, ease out to a fixed wide view of the whole table -
+	# chasing one ball of three means the other two are off-screen, which is
+	# exactly the moment you most need to see them. Eases back to tracking on
+	# its own once the last extra ball drains.
+	_wide = move_toward(_wide, 1.0 if _multiball_lit else 0.0, delta / multiball_zoom_time)
+	var w: float = smoothstep(0.0, 1.0, _wide)
+	var cam_x: float = lerpf(b.x, 0.0, w)
+	var cam_z: float = lerpf(follow_z, 0.0, w)
+	var cam_h: float = lerpf(camera_height, multiball_camera_height, w)
+	var cam_back: float = lerpf(camera_back, multiball_camera_back, w)
+
+	var target := Vector3(cam_x, cam_h, cam_z + cam_back)
 	_cam.position = _cam.position.lerp(target, 1.0 - exp(-follow_speed * delta))
 	if _punch > 0.005:
 		_cam.position += Vector3(randf_range(-_punch, _punch), randf_range(-_punch, _punch), 0)
 		_punch = move_toward(_punch, 0.0, 2.2 * delta)
-	_cam.look_at(Vector3(b.x, 0.0, b.z - look_ahead))
+	_cam.look_at(Vector3(cam_x, 0.0, lerpf(b.z - look_ahead, 0.0, w)))
 
 
 func _unhandled_input(event: InputEvent) -> void:
