@@ -187,6 +187,9 @@ var _cond_labels: Array[Label3D] = []
 var _mission_label: Label3D
 var _mission_done := false
 var _mission_tween: Tween
+## Set while the mission-complete celebration runs; pulls the camera wide the
+## same way multiball does, so the party is actually visible.
+var _party := false
 var _multiball_tween: Tween
 var _pause_menu: CanvasLayer
 ## Mirrors table_game's multiball requirements, purely for the legend text.
@@ -1051,14 +1054,17 @@ func _build_cabinet() -> void:
 	# backbox with glowing panel at the far (top) end. Sized to hold four rows of
 	# readout (title, score, status, mission) with real padding - the mission line
 	# was added last and a panel cut for three rows left it sitting on the frame.
-	_box(Vector3(w + 1.0, 6.2, 0.9), Vector3(0, 2.4, -(l * 0.5 + 1.0)), body_col)
-	_box(Vector3(w - 1.0, 4.8, 0.1), Vector3(0, 2.7, -(l * 0.5 + 0.52)),
+	# The panel's bottom edge is deliberately kept ABOVE y 0.5: from the play
+	# camera the table's own far edge hides the lowest part of the backbox, so
+	# anything put down there simply cannot be read while playing.
+	_box(Vector3(w + 1.0, 6.0, 0.9), Vector3(0, 2.6, -(l * 0.5 + 1.0)), body_col)
+	_box(Vector3(w - 1.0, 4.55, 0.1), Vector3(0, 2.83, -(l * 0.5 + 0.52)),
 			accent_warm.lerp(void_color, 0.55), 1.8)
 	# a bright frame around that panel so the backbox reads as lit signage
 	for edge in [[Vector3(w - 0.8, 0.12, 0.12), Vector3(0, 5.15, -(l * 0.5 + 0.5))],
-			[Vector3(w - 0.8, 0.12, 0.12), Vector3(0, 0.25, -(l * 0.5 + 0.5))],
-			[Vector3(0.12, 5.0, 0.12), Vector3(-(w * 0.5 - 0.4), 2.7, -(l * 0.5 + 0.5))],
-			[Vector3(0.12, 5.0, 0.12), Vector3(w * 0.5 - 0.4, 2.7, -(l * 0.5 + 0.5))]]:
+			[Vector3(w - 0.8, 0.12, 0.12), Vector3(0, 0.50, -(l * 0.5 + 0.5))],
+			[Vector3(0.12, 4.75, 0.12), Vector3(-(w * 0.5 - 0.4), 2.83, -(l * 0.5 + 0.5))],
+			[Vector3(0.12, 4.75, 0.12), Vector3(w * 0.5 - 0.4, 2.83, -(l * 0.5 + 0.5))]]:
 		_box(edge[0], edge[1], accent_bright, 2.4)
 	_build_backbox_display(l)
 	_build_grid_floor()
@@ -1072,26 +1078,26 @@ func _build_cabinet() -> void:
 ## a painted-on decoration.
 func _build_backbox_display(l: float) -> void:
 	var face_z := -(l * 0.5 + 0.44)
-	# Rows are laid out top-down against the panel interior (0.30 .. 5.10), each
+	# Rows are laid out top-down against the panel interior (0.55 .. 5.10), each
 	# one placed by its own half-height (font_size * pixel_size * 0.5) so nothing
 	# crowds its neighbour or rides up onto the frame.
-	_backbox_label(backbox_title, 78, accent_bright, Vector3(0, 4.25, face_z))
-	_score_label = _backbox_label("0", 142, Color(1, 0.97, 0.92), Vector3(0, 2.70, face_z))
+	_backbox_label(backbox_title, 78, accent_bright, Vector3(0, 4.45, face_z))
+	_score_label = _backbox_label("0", 142, Color(1, 0.97, 0.92), Vector3(0, 2.95, face_z))
 	# The status line is built from SEPARATE labels rather than one string, so
 	# every item carries its own colour and each multiball condition can turn
 	# green on its own once it is met. Small and widely spaced - crammed
 	# together as one string it read as a wall of text under the score.
-	_balls_label = _backbox_label("BALLS 3", 34, accent_cool, Vector3(-4.55, 1.45, face_z))
+	_balls_label = _backbox_label("BALLS 3", 34, accent_cool, Vector3(-4.55, 1.72, face_z))
 	_cond_labels.clear()
 	for i in COND_X.size():
 		_cond_labels.append(_backbox_label("", 34, accent_warm,
-				Vector3(COND_X[i], 1.45, face_z)))
+				Vector3(COND_X[i], 1.72, face_z)))
 	# Sits over the condition labels and replaces them while multiball runs.
-	_multiball_label = _backbox_label("", 42, accent_bright, Vector3(1.15, 1.45, face_z))
+	_multiball_label = _backbox_label("", 42, accent_bright, Vector3(1.15, 1.72, face_z))
 	_multiball_label.visible = false
 	# The mission gets its own line under the status line - it is the table's
 	# current goal, and burying it among the multiball counters would lose it.
-	_mission_label = _backbox_label("", 30, MISSION_COLOR, Vector3(0, 0.80, face_z))
+	_mission_label = _backbox_label("", 30, MISSION_COLOR, Vector3(0, 1.10, face_z))
 	GameManager.score_changed.connect(_on_score_changed)
 	GameManager.balls_changed.connect(_on_balls_changed)
 	GameManager.multiball_progress.connect(_on_multiball_progress)
@@ -1165,25 +1171,87 @@ func _on_mission_progress(title: String, items: Array) -> void:
 	if items.is_empty():
 		_mission_label.text = ""
 		return
+	# The HUD draws SCORE as a filling bar; here it is just the running figure.
 	var parts := PackedStringArray()
+	var score_text := ""
 	for item in items:
 		var got := int(item[1])
 		var needed := int(item[2])
+		if String(item[0]) == "SCORE":
+			score_text = "%s / %s" % [_grouped(got), _grouped(needed)]
+			continue
 		parts.append(("%s OK" % item[0]) if got >= needed else "%s %d/%d" % [item[0], got, needed])
 	_mission_label.modulate = MISSION_COLOR
-	_mission_label.text = "%s:  %s" % [title, "   ".join(parts)]
+	var line := "%s:  %s" % [title, score_text]
+	if not parts.is_empty():
+		line += ("   " if score_text != "" else "") + "   ".join(parts)
+	_mission_label.text = line
 
 
+## The party. The camera pulls out to take in the whole table, a banner punches
+## in over the playfield, and confetti goes up across the field in waves - this
+## is the moment the player earned, so it gets the whole screen rather than a
+## line of text on the backbox.
 func _on_mission_completed(title: String) -> void:
 	_mission_done = true
-	if not is_instance_valid(_mission_label):
-		return
-	_mission_label.text = "%s COMPLETE" % title
-	if _mission_tween and _mission_tween.is_valid():
-		_mission_tween.kill()
-	_mission_tween = create_tween().set_loops()
-	_mission_tween.tween_property(_mission_label, "modulate", COND_DONE_COLOR, 0.3)
-	_mission_tween.tween_property(_mission_label, "modulate", accent_bright, 0.3)
+	_party = true
+	if is_instance_valid(_mission_label):
+		_mission_label.text = "%s COMPLETE" % title
+		if _mission_tween and _mission_tween.is_valid():
+			_mission_tween.kill()
+		_mission_tween = create_tween().set_loops()
+		_mission_tween.tween_property(_mission_label, "modulate", COND_DONE_COLOR, 0.3)
+		_mission_tween.tween_property(_mission_label, "modulate", accent_bright, 0.3)
+	_mission_banner(title)
+	_confetti_waves()
+
+
+func _mission_banner(title: String) -> void:
+	# Over the middle of the playfield, which is dark - further up the table the
+	# banner lands on the brightly lit deck and loses its contrast.
+	var centre := _table_to_world(Vector2(TABLE_SIZE.x * 0.5, TABLE_SIZE.y * 0.6))
+	var lbl := Label3D.new()
+	lbl.text = "%s\nCOMPLETE" % title
+	lbl.font_size = 170
+	# Near-white on a heavy dark outline. The accent yellow read as muddy orange
+	# against the dark playfield and the confetti in front of it.
+	lbl.outline_size = 44
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.modulate = Color(1, 0.98, 0.9)
+	lbl.outline_modulate = Color(0.08, 0.02, 0.14)
+	lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl.no_depth_test = true
+	# Well clear of the deck, so it floats above the table rather than sitting in
+	# amongst the ramps.
+	lbl.position = Vector3(centre.x, 3.4, centre.z)
+	lbl.scale = Vector3.ONE * 0.1
+	add_child(lbl)
+
+	var tw := create_tween()
+	tw.tween_property(lbl, "scale", Vector3.ONE * 1.15, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(lbl, "scale", Vector3.ONE, 0.15)
+	tw.tween_interval(2.9)
+	tw.tween_property(lbl, "modulate:a", 0.0, 0.5)
+	tw.tween_callback(lbl.queue_free)
+
+	# A slow drift upward underneath, so the banner never sits dead still.
+	var rise := create_tween()
+	rise.tween_property(lbl, "position:y", 4.3, 4.0).set_ease(Tween.EASE_OUT)
+
+
+## Confetti fired in waves from spots across the playfield, rather than one burst
+## at one point the way a bank clear does.
+func _confetti_waves() -> void:
+	var spots := [Vector2(0.5, 0.25), Vector2(0.18, 0.5), Vector2(0.82, 0.5),
+			Vector2(0.35, 0.75), Vector2(0.65, 0.75), Vector2(0.5, 0.45)]
+	for wave in 3:
+		for s in spots:
+			if not is_inside_tree():
+				return
+			_on_bank_completed(Vector2(s.x * TABLE_SIZE.x, s.y * TABLE_SIZE.y))
+		GameManager.impact.emit(9.0)
+		await get_tree().create_timer(0.75).timeout
+	_party = false
 
 
 func _on_multiball_changed(active: bool) -> void:
@@ -2159,8 +2227,10 @@ func _process(delta: float) -> void:
 	# During multiball, ease out to a fixed wide view of the whole table -
 	# chasing one ball of three means the other two are off-screen, which is
 	# exactly the moment you most need to see them. Eases back to tracking on
-	# its own once the last extra ball drains.
-	_wide = move_toward(_wide, 1.0 if _multiball_lit else 0.0, delta / multiball_zoom_time)
+	# its own once the last extra ball drains. The mission-complete party borrows
+	# the same pull-out: the confetti goes up across the whole field, so a camera
+	# still glued to one ball would show almost none of it.
+	_wide = move_toward(_wide, 1.0 if (_multiball_lit or _party) else 0.0, delta / multiball_zoom_time)
 	var w: float = smoothstep(0.0, 1.0, _wide)
 	var cam_x: float = lerpf(b.x, 0.0, w)
 	var cam_z: float = lerpf(follow_z, 0.0, w)

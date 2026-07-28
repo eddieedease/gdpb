@@ -63,9 +63,7 @@ point_count = 4
 script = ExtResource("1_00vba")
 launch_max_speed = 4000.0
 mission_title = "NEON RUN"
-mission_ramp_rides = 2
-mission_spins = 15
-mission_bank_clears = 1
+mission_score = 250000
 next_table = "res://scenes/crush_view2.tscn"
 
 [node name="PlayfieldArt" type="Sprite2D" parent="." unique_id=800000010]

@@ -67,6 +67,10 @@ var _multiball := false
 ## Multiball is deliberately separate from this and keeps its own rules.
 @export_group("Mission")
 @export var mission_title := "WARM UP"
+## Points that must be earned ON THIS TABLE. Deliberately not the running total:
+## score carries across tables, so a cumulative target would already be met the
+## moment you arrived anywhere past the first one.
+@export var mission_score := 0
 ## Full rides through any ramp or rail, end to end.
 @export var mission_ramp_rides := 0
 ## Total spinner revolutions.
@@ -76,6 +80,8 @@ var _multiball := false
 ## Clears of the rollover lane set.
 @export var mission_lane_clears := 0
 @export var mission_bonus := 25000
+## How long the celebration runs before the table hands over to the next one.
+@export var mission_celebration_time := 5.0
 ## Where finishing the mission sends the player. Empty = this is the last table,
 ## so the mission just pays out and the table keeps going.
 @export_file("*.tscn") var next_table := ""
@@ -90,6 +96,7 @@ var _m_spins := 0
 var _m_banks := 0
 var _m_lanes := 0
 var _mission_done := false
+var _score_at_start := 0
 
 
 func _ready() -> void:
@@ -130,6 +137,11 @@ func _ready() -> void:
 	for s in get_tree().get_nodes_in_group("spinners"):
 		if s.has_signal("spun"):
 			s.spun.connect(_on_spinner_spun)
+	# Everything on the table already routes through add_score, so watching the
+	# total is how the score objective tracks every source at once - no need to
+	# tag individual scorers as "counts toward the mission".
+	_score_at_start = GameManager.score
+	GameManager.score_changed.connect(_on_score_changed_for_mission)
 	# Deferred: a child's _ready runs before its parent's, so crush_view has not
 	# connected to mission_progress yet and an immediate emit goes nowhere -
 	# leaving the backbox mission line blank until the first objective landed.
@@ -159,6 +171,11 @@ func _cheat_finish_mission() -> void:
 	_m_spins = mission_spins
 	_m_banks = mission_bank_clears
 	_m_lanes = mission_lane_clears
+	if mission_score > 0:
+		# Pay the shortfall rather than faking the counter, so the bar animates up
+		# to full and the run ends on a believable score.
+		GameManager.add_score(mission_score - _mission_earned(), _spawn.global_position)
+		return   # add_score already re-emitted, which completes the mission
 	if _mission_items().is_empty():
 		_complete_mission()   # a table with no objectives still travels on
 	else:
@@ -329,10 +346,24 @@ func _on_spinner_spun(_total: int) -> void:
 	_emit_mission()
 
 
+func _on_score_changed_for_mission(_total: int) -> void:
+	if mission_score > 0:
+		_emit_mission()
+
+
+## Points earned since arriving here. The mission bonus itself is awarded after
+## `_mission_done` is set, so it can't feed back into its own objective.
+func _mission_earned() -> int:
+	return maxi(GameManager.score - _score_at_start, 0)
+
+
 ## Objectives with a target of zero are not part of this table's mission and are
-## left out of the display entirely.
+## left out of the display entirely. SCORE is listed first when present - it is
+## the headline goal, and the backbox draws it as a progress bar.
 func _mission_items() -> Array:
 	var items := []
+	if mission_score > 0:
+		items.append(["SCORE", mini(_mission_earned(), mission_score), mission_score])
 	if mission_ramp_rides > 0:
 		items.append(["RAMPS", mini(_m_rides, mission_ramp_rides), mission_ramp_rides])
 	if mission_spins > 0:
@@ -362,7 +393,7 @@ func _complete_mission() -> void:
 	GameManager.mission_completed.emit(mission_title)
 	SoundManager.play("launch", 0.8)
 	GameManager.impact.emit(16.0)
-	await get_tree().create_timer(3.2).timeout
+	await get_tree().create_timer(mission_celebration_time).timeout
 	if not is_inside_tree() or GameManager.is_game_over or next_table == "":
 		return
 	# Travel on. The flag is what tells the next table to keep the score and to
