@@ -275,8 +275,8 @@ func _submit() -> void:
 
 
 func _on_play_again() -> void:
-	get_tree().change_scene_to_file("res://scenes/crush_view.tscn")
+	SceneLoader.goto("res://scenes/crush_view.tscn")
 
 
 func _on_menu() -> void:
-	get_tree().change_scene_to_file("res://scenes/table_select.tscn")
+	SceneLoader.goto("res://scenes/table_select.tscn")

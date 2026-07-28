@@ -170,7 +170,7 @@ func _on_resume() -> void:
 
 func _on_menu() -> void:
 	get_tree().paused = false
-	get_tree().change_scene_to_file("res://scenes/table_select.tscn")
+	SceneLoader.goto("res://scenes/table_select.tscn")
 
 
 func _unhandled_input(event: InputEvent) -> void:

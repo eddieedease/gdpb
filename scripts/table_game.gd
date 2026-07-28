@@ -202,7 +202,7 @@ func _on_game_over() -> void:
 	if not is_inside_tree():
 		return
 	HighScores.pending_score = final_score
-	get_tree().change_scene_to_file("res://scenes/high_scores.tscn")
+	SceneLoader.goto("res://scenes/high_scores.tscn")
 
 
 func _on_rollover(body: Node, _area: Area2D) -> void:
@@ -307,7 +307,7 @@ func _on_drop_hit(_target, bank: Bank) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
-		get_tree().change_scene_to_file("res://scenes/table_select.tscn")
+		SceneLoader.goto("res://scenes/table_select.tscn")
 	elif event.is_action_pressed("restart") and GameManager.is_game_over:
 		GameManager.reset()
 		for bank in [_main_bank, _deck_bank, _light_bank]:

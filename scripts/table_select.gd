@@ -110,8 +110,8 @@ func _ready() -> void:
 
 
 func _on_table_chosen(scene_path: String) -> void:
-	get_tree().change_scene_to_file(scene_path)
+	SceneLoader.goto(scene_path)
 
 
 func _on_high_scores() -> void:
-	get_tree().change_scene_to_file("res://scenes/high_scores.tscn")
+	SceneLoader.goto("res://scenes/high_scores.tscn")

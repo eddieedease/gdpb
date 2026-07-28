@@ -25,6 +25,7 @@ GameManager="*res://scripts/game_manager.gd"
 Settings="*res://scripts/settings.gd"
 SoundManager="*res://scenes/sound_manager.tscn"
 HighScores="*res://scripts/high_scores.gd"
+SceneLoader="*res://scripts/scene_loader.gd"
 
 [display]
 
