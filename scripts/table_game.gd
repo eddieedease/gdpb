@@ -61,6 +61,36 @@ var _main_clears := 0
 var _light_clears := 0
 var _multiball := false
 
+## THE TABLE'S MISSION. Each objective counts only if its target is above zero,
+## so a table can ask for any combination by leaving the rest at 0. Completing
+## every objective clears the table and sends the player on to `next_table`.
+## Multiball is deliberately separate from this and keeps its own rules.
+@export_group("Mission")
+@export var mission_title := "WARM UP"
+## Full rides through any ramp or rail, end to end.
+@export var mission_ramp_rides := 0
+## Total spinner revolutions.
+@export var mission_spins := 0
+## Clears of the main drop target bank.
+@export var mission_bank_clears := 0
+## Clears of the rollover lane set.
+@export var mission_lane_clears := 0
+@export var mission_bonus := 25000
+## Where finishing the mission sends the player. Empty = this is the last table,
+## so the mission just pays out and the table keeps going.
+@export_file("*.tscn") var next_table := ""
+## Where an arriving ball is dropped in when the player travels here from
+## another table. Falls back to the shooter lane if the table has no such node.
+@export var entry_node := "BallEntry"
+@export var entry_velocity := Vector2(0, 420)
+@export_group("")
+
+var _m_rides := 0
+var _m_spins := 0
+var _m_banks := 0
+var _m_lanes := 0
+var _mission_done := false
+
 
 func _ready() -> void:
 	# Widescreen, fill the whole width (the Classic table switches the window to
@@ -70,7 +100,9 @@ func _ready() -> void:
 	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP_WIDTH
 	win.content_scale_size = Vector2i(1280, 720)
 
-	GameManager.reset()
+	# NOTE: no GameManager.reset() here. A table load is not necessarily a new
+	# game - arriving from another table has to keep the score and balls the
+	# player already earned. The menu and Play Again start the new game instead.
 	_build_gate()
 	_drain.body_entered.connect(_on_drain_body_entered)
 
@@ -89,7 +121,57 @@ func _ready() -> void:
 
 	GameManager.game_over.connect(_on_game_over)
 
+	# Mission sources. Channels are still children of the table at this point -
+	# crush_view reparents them into its render tiers afterwards, since a
+	# child's _ready runs before its parent's.
+	for n in get_children():
+		if n.has_signal("ball_released"):
+			n.ball_released.connect(_on_channel_released)
+	for s in get_tree().get_nodes_in_group("spinners"):
+		if s.has_signal("spun"):
+			s.spun.connect(_on_spinner_spun)
+	# Deferred: a child's _ready runs before its parent's, so crush_view has not
+	# connected to mission_progress yet and an immediate emit goes nowhere -
+	# leaving the backbox mission line blank until the first objective landed.
+	call_deferred("_emit_mission")
+	_register_cheats()
+
 	_spawn_ball()
+
+
+## Development shortcuts. Deliberately spelled with letters that are NOT bound to
+## the flippers or nudge (a, d, q, e, r), so typing a code doesn't also whack the
+## ball across the table while you do it.
+func _register_cheats() -> void:
+	Cheats.register("pop", "SKIP TO NEXT TABLE", _cheat_finish_mission)
+	Cheats.register("multi", "START MULTIBALL", _start_multiball)
+	Cheats.register("plus", "EXTRA BALL", _cheat_extra_ball)
+	Cheats.register("coin", "+100,000", _cheat_score)
+
+
+## Fills in every objective and lets the REAL completion path run from there -
+## bonus, banner, travel - so the cheat exercises the same code a genuine clear
+## does rather than a shortcut that could drift away from it.
+func _cheat_finish_mission() -> void:
+	if _mission_done:
+		return
+	_m_rides = mission_ramp_rides
+	_m_spins = mission_spins
+	_m_banks = mission_bank_clears
+	_m_lanes = mission_lane_clears
+	if _mission_items().is_empty():
+		_complete_mission()   # a table with no objectives still travels on
+	else:
+		_emit_mission()
+
+
+func _cheat_extra_ball() -> void:
+	GameManager.balls_left += 1
+	GameManager.balls_changed.emit(GameManager.balls_left)
+
+
+func _cheat_score() -> void:
+	GameManager.add_score(100000, _spawn.global_position)
 
 
 func _build_gate() -> void:
@@ -105,9 +187,20 @@ func _build_gate() -> void:
 
 func _spawn_ball() -> void:
 	var ball: RigidBody2D = BALL_SCENE.instantiate()
-	ball.position = _spawn.global_position
 	ball.max_contacts_reported = 10
-	add_child(ball)
+	# A ball that has just travelled here from another table drops in at the
+	# entry point already moving, rather than appearing in the shooter lane for
+	# the player to launch again - they are mid-game, not starting one.
+	var entry: Node2D = get_node_or_null(entry_node) as Node2D
+	if GameManager.arriving_from_table and entry != null:
+		GameManager.arriving_from_table = false
+		ball.position = entry.global_position
+		add_child(ball)
+		ball.linear_velocity = entry_velocity
+	else:
+		GameManager.arriving_from_table = false
+		ball.position = _spawn.global_position
+		add_child(ball)
 	_launch_charge = 0.0
 
 
@@ -222,6 +315,62 @@ func _bank_centre(bank: Bank) -> Vector2:
 	return sum / maxi(count, 1)
 
 
+## --- mission ---------------------------------------------------------------
+
+func _on_channel_released(_body: Node, rode_through: bool) -> void:
+	if rode_through:
+		_m_rides += 1
+		_emit_mission()
+
+
+func _on_spinner_spun(_total: int) -> void:
+	# The spinner emits once per revolution, so each call is one more.
+	_m_spins += 1
+	_emit_mission()
+
+
+## Objectives with a target of zero are not part of this table's mission and are
+## left out of the display entirely.
+func _mission_items() -> Array:
+	var items := []
+	if mission_ramp_rides > 0:
+		items.append(["RAMPS", mini(_m_rides, mission_ramp_rides), mission_ramp_rides])
+	if mission_spins > 0:
+		items.append(["SPINS", mini(_m_spins, mission_spins), mission_spins])
+	if mission_bank_clears > 0:
+		items.append(["BANK", mini(_m_banks, mission_bank_clears), mission_bank_clears])
+	if mission_lane_clears > 0:
+		items.append(["LANES", mini(_m_lanes, mission_lane_clears), mission_lane_clears])
+	return items
+
+
+func _emit_mission() -> void:
+	GameManager.mission_progress.emit(mission_title, _mission_items())
+	if _mission_done:
+		return
+	for item in _mission_items():
+		if int(item[1]) < int(item[2]):
+			return
+	if _mission_items().is_empty():
+		return   # this table has no mission set
+	_complete_mission()
+
+
+func _complete_mission() -> void:
+	_mission_done = true
+	GameManager.add_score(mission_bonus, _spawn.global_position)
+	GameManager.mission_completed.emit(mission_title)
+	SoundManager.play("launch", 0.8)
+	GameManager.impact.emit(16.0)
+	await get_tree().create_timer(3.2).timeout
+	if not is_inside_tree() or GameManager.is_game_over or next_table == "":
+		return
+	# Travel on. The flag is what tells the next table to keep the score and to
+	# feed the ball in at its entry point.
+	GameManager.arriving_from_table = true
+	SceneLoader.goto(next_table)
+
+
 ## Bank clears build toward multiball, but ONLY while it is inactive - during
 ## multiball a clear earns its bonus and nothing more.
 func _count_toward_multiball(bank: Bank) -> void:
@@ -298,6 +447,11 @@ func _on_drop_hit(_target, bank: Bank) -> void:
 		# so the burst reads as "that set is cleared".
 		GameManager.bank_completed.emit(_bank_centre(bank))
 		_count_toward_multiball(bank)
+		if bank == _main_bank:
+			_m_banks += 1
+		elif bank == _light_bank:
+			_m_lanes += 1
+		_emit_mission()
 		await get_tree().create_timer(1.2).timeout
 		for d in bank.targets:
 			d.reset_target()

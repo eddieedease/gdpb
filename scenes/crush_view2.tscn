@@ -1,0 +1,23 @@
+[gd_scene load_steps=4 format=3 uid="uid://dn8v2wq4trm71"]
+
+[ext_resource type="Script" uid="uid://ctc77kndfw61h" path="res://scripts/crush_view.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://c2ndtbl9xkr45" path="res://scenes/advanced_table2.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="3"]
+
+[node name="CrushView" type="Node3D"]
+script = ExtResource("1")
+backbox_title = "THE VAULT"
+board_color = Color(0.74, 0.79, 0.82, 1)
+accent_warm = Color(0.4, 0.95, 0.75, 1)
+accent_cool = Color(0.45, 0.7, 1, 1)
+
+[node name="GameViewport" type="SubViewport" parent="."]
+size = Vector2i(1280, 2560)
+render_target_update_mode = 4
+
+[node name="Table" parent="GameViewport" instance=ExtResource("2")]
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7.2, 18)
+
+[node name="HUD" parent="." instance=ExtResource("3")]

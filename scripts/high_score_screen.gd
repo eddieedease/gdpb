@@ -275,6 +275,7 @@ func _submit() -> void:
 
 
 func _on_play_again() -> void:
+	GameManager.reset()
 	SceneLoader.goto("res://scenes/crush_view.tscn")
 
 

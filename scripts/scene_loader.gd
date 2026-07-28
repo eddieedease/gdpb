@@ -114,12 +114,19 @@ func goto(path: String) -> void:
 	# Let the new scene finish _ready and actually draw before uncovering it.
 	await get_tree().process_frame
 	await get_tree().process_frame
+	# Then hold it frozen for the rest of the wait. The new table starts playing
+	# the moment it is ready, so without this the ball spends the remaining
+	# fraction of a second falling behind the curtain - on an arrival that feeds
+	# the ball in from the top, the player misses the start of their own shot.
+	# Safe because this overlay runs with PROCESS_MODE_ALWAYS.
+	get_tree().paused = true
 	while Time.get_ticks_msec() - shown_at < int(MIN_VISIBLE * 1000.0):
 		await get_tree().process_frame
 
 	var out := create_tween()
 	out.tween_property(_root, "modulate:a", 0.0, FADE)
 	await out.finished
+	get_tree().paused = false
 	_root.visible = false
 	_busy = false
 

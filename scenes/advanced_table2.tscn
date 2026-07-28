@@ -1,0 +1,93 @@
+[gd_scene load_steps=10 format=3 uid="uid://c2ndtbl9xkr45"]
+
+[ext_resource type="Script" uid="uid://yx5rt48kvpxe" path="res://scripts/table_game.gd" id="1_game"]
+[ext_resource type="PackedScene" uid="uid://dai16lf6ew7j4" path="res://scenes/wall.tscn" id="2_wall"]
+[ext_resource type="PackedScene" uid="uid://ddbn5tnnjfisx" path="res://scenes/bumper.tscn" id="3_bump"]
+[ext_resource type="PackedScene" uid="uid://be5ctreeg2i5i" path="res://scenes/flipper_left.tscn" id="4_fl"]
+[ext_resource type="PackedScene" uid="uid://yehdbnn32jj1" path="res://scenes/flipper_right.tscn" id="5_fr"]
+[ext_resource type="Script" uid="uid://c2rof1dtyk4t8" path="res://scripts/drop_target.gd" id="6_drop"]
+[ext_resource type="PackedScene" uid="uid://bqr7v2xk1mnop" path="res://scenes/rollover.tscn" id="7_roll"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_t2a"]
+size = Vector2(64, 34)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_t2drain"]
+size = Vector2(1280, 80)
+
+[node name="AdvancedTable2" type="Node2D"]
+script = ExtResource("1_game")
+mission_title = "THE VAULT"
+mission_bank_clears = 1
+mission_lane_clears = 1
+mission_bonus = 40000
+entry_velocity = Vector2(40, 520)
+
+[node name="BallSpawn" type="Marker2D" parent="."]
+position = Vector2(1120, 2360)
+
+[node name="BallEntry" type="Marker2D" parent="."]
+position = Vector2(640, 260)
+
+[node name="WallLeft" parent="." instance=ExtResource("2_wall")]
+points = PackedVector2Array(470, 2400, 150, 2010, 110, 1900, 110, 200, 200, 110, 640, 110)
+
+[node name="WallRight" parent="." instance=ExtResource("2_wall")]
+points = PackedVector2Array(640, 110, 1080, 110, 1170, 200, 1170, 2440, 1060, 2440)
+
+[node name="ShooterInner" parent="." instance=ExtResource("2_wall")]
+points = PackedVector2Array(1060, 2380, 1060, 1980, 1010, 1930, 940, 2120, 810, 2400)
+
+[node name="Bumper0" parent="." instance=ExtResource("3_bump")]
+modulate = Color(0.55, 0.9, 1, 1)
+position = Vector2(430, 700)
+
+[node name="Bumper1" parent="." instance=ExtResource("3_bump")]
+modulate = Color(1, 0.6, 0.85, 1)
+position = Vector2(850, 700)
+
+[node name="Bumper2" parent="." instance=ExtResource("3_bump")]
+modulate = Color(1, 0.85, 0.5, 1)
+position = Vector2(640, 950)
+
+[node name="DropTarget1" type="StaticBody2D" parent="." groups=["drop_targets"]]
+position = Vector2(520, 1380)
+script = ExtResource("6_drop")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="DropTarget1"]
+shape = SubResource("RectangleShape2D_t2a")
+
+[node name="Visual" type="Polygon2D" parent="DropTarget1"]
+color = Color(0.35, 0.95, 0.7, 1)
+polygon = PackedVector2Array(-32, -17, 32, -17, 32, 17, -32, 17)
+
+[node name="DropTarget2" type="StaticBody2D" parent="." groups=["drop_targets"]]
+position = Vector2(760, 1380)
+script = ExtResource("6_drop")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="DropTarget2"]
+shape = SubResource("RectangleShape2D_t2a")
+
+[node name="Visual" type="Polygon2D" parent="DropTarget2"]
+color = Color(0.35, 0.95, 0.7, 1)
+polygon = PackedVector2Array(-32, -17, 32, -17, 32, 17, -32, 17)
+
+[node name="RolloverLight0" parent="." instance=ExtResource("7_roll")]
+position = Vector2(420, 1750)
+
+[node name="RolloverLight1" parent="." instance=ExtResource("7_roll")]
+position = Vector2(640, 1750)
+
+[node name="RolloverLight2" parent="." instance=ExtResource("7_roll")]
+position = Vector2(860, 1750)
+
+[node name="FlipperMainLeft" parent="." instance=ExtResource("4_fl")]
+position = Vector2(478, 2300)
+
+[node name="FlipperMainRight" parent="." instance=ExtResource("5_fr")]
+position = Vector2(814, 2300)
+
+[node name="Drain" type="Area2D" parent="."]
+position = Vector2(640, 2520)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Drain"]
+shape = SubResource("RectangleShape2D_t2drain")

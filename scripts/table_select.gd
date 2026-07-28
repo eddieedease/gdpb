@@ -110,6 +110,9 @@ func _ready() -> void:
 
 
 func _on_table_chosen(scene_path: String) -> void:
+	# Choosing a table from the menu is what starts a NEW game - tables no
+	# longer reset on load, so that travelling between them keeps the score.
+	GameManager.reset()
 	SceneLoader.goto(scene_path)
 
 

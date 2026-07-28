@@ -26,6 +26,7 @@ Settings="*res://scripts/settings.gd"
 SoundManager="*res://scenes/sound_manager.tscn"
 HighScores="*res://scripts/high_scores.gd"
 SceneLoader="*res://scripts/scene_loader.gd"
+Cheats="*res://scripts/cheats.gd"
 
 [display]
 

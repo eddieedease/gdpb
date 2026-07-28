@@ -3,3 +3,6 @@
 
 # macOS junk
 .DS_Store
+
+# Throwaway verification scenes/scripts. Handy locally, not part of the game.
+debug/

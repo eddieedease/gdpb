@@ -184,6 +184,9 @@ var _balls_label: Label3D
 var _multiball_label: Label3D
 var _multiball_lit := false
 var _cond_labels: Array[Label3D] = []
+var _mission_label: Label3D
+var _mission_done := false
+var _mission_tween: Tween
 var _multiball_tween: Tween
 var _pause_menu: CanvasLayer
 ## Mirrors table_game's multiball requirements, purely for the legend text.
@@ -195,6 +198,7 @@ const MULTIBALL_LIGHT_TARGET := 1
 const COND_X := [-1.75, 1.15, 4.05]
 const COND_DONE_COLOR := Color(0.35, 1.0, 0.48)
 const COND_LANES_COLOR := Color(0.72, 0.62, 1.0)
+const MISSION_COLOR := Color(0.55, 0.92, 1.0)
 var _targets: Array = []      # drop-target blocks; see _build_target_visuals
 var _lights: Array = []       # rollover discs; see _build_rollover_visuals
 var _spinners: Array = []   # spinner blades; see _build_spinner_visuals
@@ -1044,15 +1048,17 @@ func _build_cabinet() -> void:
 	for corner in [Vector3(-w * 0.5 - 0.2, -2.2, l * 0.5 + 0.2), Vector3(w * 0.5 + 0.2, -2.2, l * 0.5 + 0.2),
 			Vector3(-w * 0.5 - 0.2, -2.2, -l * 0.5 - 0.2), Vector3(w * 0.5 + 0.2, -2.2, -l * 0.5 - 0.2)]:
 		_box(Vector3(0.3, 3.4, 0.3), corner, body_col)
-	# backbox with glowing panel at the far (top) end
-	_box(Vector3(w + 1.0, 4.6, 0.9), Vector3(0, 2.0, -(l * 0.5 + 1.0)), body_col)
-	_box(Vector3(w - 1.0, 3.4, 0.1), Vector3(0, 2.1, -(l * 0.5 + 0.52)),
+	# backbox with glowing panel at the far (top) end. Sized to hold four rows of
+	# readout (title, score, status, mission) with real padding - the mission line
+	# was added last and a panel cut for three rows left it sitting on the frame.
+	_box(Vector3(w + 1.0, 6.2, 0.9), Vector3(0, 2.4, -(l * 0.5 + 1.0)), body_col)
+	_box(Vector3(w - 1.0, 4.8, 0.1), Vector3(0, 2.7, -(l * 0.5 + 0.52)),
 			accent_warm.lerp(void_color, 0.55), 1.8)
 	# a bright frame around that panel so the backbox reads as lit signage
-	for edge in [[Vector3(w - 0.8, 0.12, 0.12), Vector3(0, 3.85, -(l * 0.5 + 0.5))],
-			[Vector3(w - 0.8, 0.12, 0.12), Vector3(0, 0.35, -(l * 0.5 + 0.5))],
-			[Vector3(0.12, 3.6, 0.12), Vector3(-(w * 0.5 - 0.4), 2.1, -(l * 0.5 + 0.5))],
-			[Vector3(0.12, 3.6, 0.12), Vector3(w * 0.5 - 0.4, 2.1, -(l * 0.5 + 0.5))]]:
+	for edge in [[Vector3(w - 0.8, 0.12, 0.12), Vector3(0, 5.15, -(l * 0.5 + 0.5))],
+			[Vector3(w - 0.8, 0.12, 0.12), Vector3(0, 0.25, -(l * 0.5 + 0.5))],
+			[Vector3(0.12, 5.0, 0.12), Vector3(-(w * 0.5 - 0.4), 2.7, -(l * 0.5 + 0.5))],
+			[Vector3(0.12, 5.0, 0.12), Vector3(w * 0.5 - 0.4, 2.7, -(l * 0.5 + 0.5))]]:
 		_box(edge[0], edge[1], accent_bright, 2.4)
 	_build_backbox_display(l)
 	_build_grid_floor()
@@ -1066,24 +1072,32 @@ func _build_cabinet() -> void:
 ## a painted-on decoration.
 func _build_backbox_display(l: float) -> void:
 	var face_z := -(l * 0.5 + 0.44)
-	_backbox_label(backbox_title, 78, accent_bright, Vector3(0, 3.32, face_z))
-	_score_label = _backbox_label("0", 142, Color(1, 0.97, 0.92), Vector3(0, 2.18, face_z))
+	# Rows are laid out top-down against the panel interior (0.30 .. 5.10), each
+	# one placed by its own half-height (font_size * pixel_size * 0.5) so nothing
+	# crowds its neighbour or rides up onto the frame.
+	_backbox_label(backbox_title, 78, accent_bright, Vector3(0, 4.25, face_z))
+	_score_label = _backbox_label("0", 142, Color(1, 0.97, 0.92), Vector3(0, 2.70, face_z))
 	# The status line is built from SEPARATE labels rather than one string, so
 	# every item carries its own colour and each multiball condition can turn
 	# green on its own once it is met. Small and widely spaced - crammed
 	# together as one string it read as a wall of text under the score.
-	_balls_label = _backbox_label("BALLS 3", 34, accent_cool, Vector3(-4.55, 1.02, face_z))
+	_balls_label = _backbox_label("BALLS 3", 34, accent_cool, Vector3(-4.55, 1.45, face_z))
 	_cond_labels.clear()
 	for i in COND_X.size():
 		_cond_labels.append(_backbox_label("", 34, accent_warm,
-				Vector3(COND_X[i], 1.02, face_z)))
+				Vector3(COND_X[i], 1.45, face_z)))
 	# Sits over the condition labels and replaces them while multiball runs.
-	_multiball_label = _backbox_label("", 42, accent_bright, Vector3(1.15, 1.02, face_z))
+	_multiball_label = _backbox_label("", 42, accent_bright, Vector3(1.15, 1.45, face_z))
 	_multiball_label.visible = false
+	# The mission gets its own line under the status line - it is the table's
+	# current goal, and burying it among the multiball counters would lose it.
+	_mission_label = _backbox_label("", 30, MISSION_COLOR, Vector3(0, 0.80, face_z))
 	GameManager.score_changed.connect(_on_score_changed)
 	GameManager.balls_changed.connect(_on_balls_changed)
 	GameManager.multiball_progress.connect(_on_multiball_progress)
 	GameManager.multiball_changed.connect(_on_multiball_changed)
+	GameManager.mission_progress.connect(_on_mission_progress)
+	GameManager.mission_completed.connect(_on_mission_completed)
 	_on_score_changed(GameManager.score)
 	_on_balls_changed(GameManager.balls_left)
 	_on_multiball_progress(0, 0, 0)
@@ -1140,6 +1154,36 @@ func _on_multiball_progress(deck_clears: int, main_clears: int, light_clears: in
 		var done: bool = int(spec[1]) >= int(spec[2])
 		lbl.text = ("%s OK" % spec[0]) if done else ("%s %d/%d" % [spec[0], spec[1], spec[2]])
 		lbl.modulate = COND_DONE_COLOR if done else spec[3]
+
+
+## The table's current mission and how far along it is. An objective that is met
+## reads OK; once the whole mission is done the line is taken over by the
+## completion banner instead.
+func _on_mission_progress(title: String, items: Array) -> void:
+	if not is_instance_valid(_mission_label) or _mission_done:
+		return
+	if items.is_empty():
+		_mission_label.text = ""
+		return
+	var parts := PackedStringArray()
+	for item in items:
+		var got := int(item[1])
+		var needed := int(item[2])
+		parts.append(("%s OK" % item[0]) if got >= needed else "%s %d/%d" % [item[0], got, needed])
+	_mission_label.modulate = MISSION_COLOR
+	_mission_label.text = "%s:  %s" % [title, "   ".join(parts)]
+
+
+func _on_mission_completed(title: String) -> void:
+	_mission_done = true
+	if not is_instance_valid(_mission_label):
+		return
+	_mission_label.text = "%s COMPLETE" % title
+	if _mission_tween and _mission_tween.is_valid():
+		_mission_tween.kill()
+	_mission_tween = create_tween().set_loops()
+	_mission_tween.tween_property(_mission_label, "modulate", COND_DONE_COLOR, 0.3)
+	_mission_tween.tween_property(_mission_label, "modulate", accent_bright, 0.3)
 
 
 func _on_multiball_changed(active: bool) -> void:

@@ -32,7 +32,11 @@ func _ready() -> void:
 	# deck cage needed. Each quad overhangs its ends so neighbours overlap at
 	# the joints and leave no gap to slip through, and the quads stay convex,
 	# which the physics engine handles far more robustly than a concave chain.
-	var half := thickness * 0.5
+	# Floored deliberately. Adding this export after the tables were built made
+	# the editor write `thickness = null` onto every existing wall on its next
+	# save, which would silently collapse them back to the hairline barriers a
+	# fast ball can cross. A wall with no thickness is never what anyone wants.
+	var half := maxf(thickness, 6.0) * 0.5
 	for i in points.size() - 1:
 		var a: Vector2 = points[i]
 		var b: Vector2 = points[i + 1]
