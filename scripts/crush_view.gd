@@ -454,9 +454,51 @@ func _channel_h(ramp: Node2D, t: float) -> float:
 ## longitudinal wires wrapping the ball (open top), a funnel that widens to
 ## each opening, ball-sized 'O' rings at the throats and along the run, and
 ## support posts. Built from the channel's centre curve.
-const TUBE_R := 0.165          # tube radius: ball (0.14) + clearance
+const TUBE_R := 0.165          # minimum tube radius: ball (0.14) + clearance
 const WIRE_HALF := 0.008       # bottom-rail thickness
 const TUBE_SEGS := 14          # facets around the sleeve
+
+
+## The drawn tube must be at least as wide as the corridor the PHYSICS lets the
+## ball occupy, or the ball pokes out through the sleeve on the side it is
+## riding against. A 2D channel of channel_width lets the ball centre sit up to
+## (channel_width/2 - ball radius) off the centreline, so the tube has to cover
+## the full half-width - a fixed TUBE_R does not.
+func _channel_tube_r(ramp: Node2D) -> float:
+	var w = ramp.get("channel_width")
+	if w == null:
+		return TUBE_R
+	return maxf(TUBE_R, (float(w) * 0.5) / PX_PER_M)
+
+
+## Where to DRAW a riding ball, as opposed to where physics has it. Widening
+## the sleeve is not on its own enough: the channel only releases a ball once
+## it is a full channel_width off the centreline, so on tight bends - and in
+## the frames right after boarding, before the centring pull has taken hold -
+## physics legitimately holds it further out than any sane tube is wide. This
+## pins the drawn position inside the sleeve while leaving its position ALONG
+## the run untouched, so travel and timing still read exactly as they play.
+func _clamp_into_tube(pos: Vector2, chan: Node2D, off: float) -> Vector2:
+	var length: float = chan.curve.get_baked_length()
+	var centre: Vector2 = chan.to_global(chan.curve.sample_baked(off))
+	var ahead: Vector2 = chan.to_global(chan.curve.sample_baked(minf(off + 8.0, length)))
+	var behind: Vector2 = chan.to_global(chan.curve.sample_baked(maxf(off - 8.0, 0.0)))
+	var tangent := (ahead - behind).normalized()
+	if tangent.length_squared() < 0.5:
+		return pos
+	var normal := Vector2(-tangent.y, tangent.x)
+	var lateral: float = (pos - centre).dot(normal)
+	# Keep the ball's silhouette inside the sleeve wall, not merely its centre.
+	var max_lat: float = maxf((_channel_tube_r(chan) - BALL_R) * PX_PER_M, 0.0)
+	# Ease the correction away toward both mouths. Boarding and release are
+	# instantaneous, so a clamp still at full strength at the very end makes the
+	# ball JUMP sideways the moment it is captured or let go. Fading it out over
+	# the last stretch means drawn and true positions have already converged by
+	# then, and the handover is invisible.
+	var fade := clampf(minf(off, length - off) / 40.0, 0.0, 1.0)
+	fade = fade * fade * (3.0 - 2.0 * fade)
+	var correction: float = (clampf(lateral, -max_lat, max_lat) - lateral) * fade
+	return pos + normal * correction
 
 ## Sample a curve at evenly spaced points along its length. Curve2D.tessellate()
 ## is adaptive - a long but nearly-straight stretch can collapse to just its
@@ -492,20 +534,29 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 	var n := cpts.size()
 	if n < 2:
 		return
-	# Centreline positions first, at ball-centre height, with the tube radius
-	# flared into a funnel over the first/last 10%.
+	# Centreline positions first, with the tube radius flared into a short
+	# funnel at each mouth.
+	#
+	# The channel height is the height of the tube's FLOOR, so the axis sits one
+	# radius above it. Putting the axis on the floor height instead sinks the
+	# bottom of the sleeve below the table, and since a channel is near
+	# horizontal at its mouths, the opaque board then slices the end into a very
+	# long ellipse - the "scoop with an open top" look. It also has the ball
+	# ride the tube's axis rather than its floor.
 	var centers: Array[Vector3] = []
 	var radii := PackedFloat32Array()
+	var tube_r := _channel_tube_r(ramp)
 	for i in n:
 		var t := float(i) / float(n - 1)
 		var w := _table_to_world(ramp.to_global(cpts[i]))
-		centers.append(Vector3(w.x, _channel_h(ramp, t) + BALL_R, w.z))
-		# Gentle funnel. A hard 2.1x flare made the mouths fan out into a
-		# splayed mess (nothing ties the sleeve together out there), which read
-		# as the rail fraying rather than opening up. A modest flare plus a rim
-		# ring at the very end (below) gives a clean mouth.
-		var k := clampf(minf(t, 1.0 - t) / 0.10, 0.0, 1.0)
-		radii.append(TUBE_R * lerpf(1.45, 1.0, k * k * (3.0 - 2.0 * k)))
+		centers.append(Vector3(w.x, _channel_h(ramp, t) + tube_r, w.z))
+		# Barely-there funnel. The flare multiplies the tube radius, so once the
+		# radius itself widened to cover the physics corridor the old 1.45x
+		# turned the ends into splayed trumpets. The mouth only has to read as
+		# an opening - the rim ring at the very end (below) does that work - so
+		# keep the flare small and short, and let the tube stay a tube.
+		var k := clampf(minf(t, 1.0 - t) / 0.05, 0.0, 1.0)
+		radii.append(tube_r * lerpf(1.12, 1.0, k * k * (3.0 - 2.0 * k)))
 
 	# Then the cross-section frame at each sample, square to the tube's own 3D
 	# direction. This MUST be derived from the WORLD centres above, never from
@@ -598,13 +649,13 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 	var sh := SurfaceTool.new()
 	sh.begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
 	for i in n:
-		var height := centers[i].y - BALL_R
+		var height := centers[i].y - tube_r   # the tube's floor, i.e. its channel height
 		var a2 := clampf(height / maxf(_channel_peak(ramp), 0.001), 0.0, 1.0) * 0.4
 		var s := Vector3(centers[i].x, 0.012, centers[i].z)
 		# Flattened to the board: the shadow spreads sideways, not along the
 		# tube's banked frame.
 		var flat := Vector3(side[i].x, 0.0, side[i].z)
-		flat = flat.normalized() * TUBE_R if flat.length() > 0.001 else Vector3(TUBE_R, 0, 0)
+		flat = flat.normalized() * tube_r if flat.length() > 0.001 else Vector3(tube_r, 0, 0)
 		sh.set_color(Color(0, 0, 0, a2))
 		sh.add_vertex(s + flat)
 		sh.set_color(Color(0, 0, 0, a2))
@@ -647,7 +698,7 @@ func _build_ramp_rails(ramp: Node2D) -> void:
 		# +Y, which is why the tangent goes in the basis's Y column.
 		ring.transform = Transform3D(Basis(side[idx], tangents[idx], lift[idx]), c3)
 		add_child(ring)
-		var post_h := c3.y - TUBE_R
+		var post_h := c3.y - tube_r
 		if post_h > 0.03:
 			var post := MeshInstance3D.new()
 			var box := BoxMesh.new()
@@ -2076,12 +2127,14 @@ func _update_balls(delta: float, shadow_dir: Vector2) -> void:
 		# slope profile at its current position - it rolls up the entry, along
 		# the top, and down the exit in sync with the rail visuals.
 		var target_lift := 0.0
+		var draw_at: Vector2 = b.global_position
 		if b.get_meta("on_ramp", false):
 			var chan = b.get_meta("channel", null)
 			if chan != null and is_instance_valid(chan) and chan.get("curve") != null:
 				var local: Vector2 = chan.to_local(b.global_position)
 				var off: float = chan.curve.get_closest_offset(local)
 				target_lift = _channel_h(chan, off / maxf(chan.curve.get_baked_length(), 1.0))
+				draw_at = _clamp_into_tube(b.global_position, chan, off)
 			else:
 				target_lift = top_height
 		elif b.get_meta("on_deck", false):
@@ -2091,7 +2144,7 @@ func _update_balls(delta: float, shadow_dir: Vector2) -> void:
 			target_lift = deck_height
 		var lift: float = lerpf(fx.lift, target_lift, 1.0 - exp(-16.0 * delta))
 		fx.lift = lift
-		var w := _table_to_world(b.global_position)
+		var w := _table_to_world(draw_at)
 		fx.sphere.position = Vector3(w.x, BALL_R + lift, w.z)
 		var reach: float = shadow_reach * (0.5 + lift * 6.0)
 		fx.blob.position = Vector3(w.x + shadow_dir.x * reach, 0.014, w.z + shadow_dir.y * reach)

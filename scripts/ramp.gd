@@ -273,7 +273,22 @@ func _on_mouth_entered(body: Node, inward: Vector2, mouth_pos: Vector2) -> void:
 	# clipping its outer edge was still boarded and then dragged sideways onto
 	# the centreline - so a shot that visibly MISSED the rail appeared to run
 	# alongside it for half its length before being spat back out.
-	var lateral: float = absf((body.global_position - mouth_pos).dot(Vector2(-inward.y, inward.x)))
+	#
+	# Judged where the ball will CROSS THE MOUTH, not where it happens to sit on
+	# the frame the capture zone fired. Those are the same point only for a slow
+	# ball: a fast one trips the zone way out at its rim, still a long way
+	# off-axis, and measuring it there rejected shots that were heading straight
+	# down the middle. That made the rails feel much harder to hit the moment
+	# the flippers got stronger - speed decides WHEN this check runs, and it must
+	# not also decide the verdict.
+	var normal := Vector2(-inward.y, inward.x)
+	var rel: Vector2 = body.global_position - mouth_pos
+	var lateral: float = absf(rel.dot(normal))
+	var closing: float = v.dot(inward)
+	if closing > 0.0:
+		var t: float = -rel.dot(inward) / closing
+		if t > 0.0:   # still short of the mouth - predict forward to it
+			lateral = absf((rel + v * t).dot(normal))
 	if lateral > channel_width * max_board_offset:
 		return
 	# board the ramp -> ride over the playfield (but keep colliding with the
