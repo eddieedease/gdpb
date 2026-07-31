@@ -51,7 +51,9 @@ func _ready() -> void:
 	box.add_child(rule)
 
 	var subtitle := Label.new()
-	subtitle.text = "SELECT A TABLE"
+	# Not "select a table" any more - with one table the button says PLAY! and
+	# there is nothing to select between.
+	subtitle.text = "ARCADE PINBALL"
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_font_size_override("font_size", 26)
 	# Cream, not sun-yellow: it lands on top of the sun disc, where yellow on
@@ -66,11 +68,15 @@ func _ready() -> void:
 	box.add_child(spacer)
 
 	var first_button: Button = null
+	# With a single table there is nothing to choose between, so the button says
+	# what it DOES rather than naming the thing. Listing the name and blurb only
+	# earns its space once there is more than one to tell apart.
+	var one_table := TABLES.size() == 1
 	for table in TABLES:
 		var btn := Button.new()
-		btn.text = "%s\n%s" % [table["name"], table["desc"]]
-		btn.custom_minimum_size = Vector2(560, 104)
-		btn.add_theme_font_size_override("font_size", 30)
+		btn.text = "PLAY!" if one_table else "%s\n%s" % [table["name"], table["desc"]]
+		btn.custom_minimum_size = Vector2(560, 76 if one_table else 104)
+		btn.add_theme_font_size_override("font_size", 34 if one_table else 30)
 		MenuTheme.style_button(btn)
 		btn.pressed.connect(_on_table_chosen.bind(table["scene"]))
 		box.add_child(btn)
@@ -104,6 +110,22 @@ func _ready() -> void:
 	hint.add_theme_color_override("font_color", MenuTheme.C_CREAM)
 	hint.modulate = Color(1, 1, 1, 0.72)
 	box.add_child(hint)
+
+	# Byline, pinned to the bottom of the SCREEN rather than added to the centred
+	# box - a credit belongs at the edge of the frame, not tucked under the menu.
+	var byline := Label.new()
+	byline.text = "By Edease"
+	byline.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	byline.offset_top = -52
+	byline.offset_bottom = -16
+	byline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	byline.add_theme_font_override("font", MenuTheme.TITLE_FONT)
+	byline.add_theme_font_size_override("font_size", 22)
+	byline.add_theme_color_override("font_color", MenuTheme.C_TURQ)
+	byline.add_theme_color_override("font_outline_color", MenuTheme.C_INK)
+	byline.add_theme_constant_override("outline_size", 8)
+	byline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(byline)
 
 	if first_button:
 		first_button.grab_focus()
