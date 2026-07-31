@@ -12,6 +12,11 @@ const SAVE_PATH := "user://settings.cfg"
 ## fighting it.
 const DEFAULT_MUSIC := 1.0
 const DEFAULT_SFX := 0.7
+## Camera pitch, -1 (steep, looking down on the table) .. +1 (flat, looking out
+## toward the horizon). 0 is the view the table was designed around. Lives here
+## rather than on the view so it survives travelling between tables, and the
+## restart after it.
+const DEFAULT_TILT := 0.0
 
 ## Bus names created at startup if they don't already exist in the project.
 const MUSIC_BUS := "Music"
@@ -21,9 +26,17 @@ signal changed
 
 var music_volume := DEFAULT_MUSIC
 var sfx_volume := DEFAULT_SFX
+var camera_tilt := DEFAULT_TILT
+
+## Camera tilt is driven by a held key, so it changes every frame while the
+## player is adjusting it. Writing the file on each of those would be hundreds of
+## saves for one adjustment, so it is marked dirty and flushed once things settle.
+const TILT_SAVE_DELAY := 0.6
+var _tilt_dirty := 0.0
 
 
 func _ready() -> void:
+	set_process(true)
 	_ensure_buses()
 	load_settings()
 	_apply()
@@ -53,6 +66,23 @@ func set_sfx_volume(v: float) -> void:
 	save_settings()
 
 
+## Set from the live camera control. Does not write immediately - see _process.
+func set_camera_tilt(v: float) -> void:
+	var t := clampf(v, -1.0, 1.0)
+	if is_equal_approx(t, camera_tilt):
+		return
+	camera_tilt = t
+	_tilt_dirty = TILT_SAVE_DELAY
+
+
+func _process(delta: float) -> void:
+	if _tilt_dirty <= 0.0:
+		return
+	_tilt_dirty -= delta
+	if _tilt_dirty <= 0.0:
+		save_settings()
+
+
 func _apply() -> void:
 	_set_bus(MUSIC_BUS, music_volume)
 	_set_bus(SFX_BUS, sfx_volume)
@@ -75,10 +105,13 @@ func load_settings() -> void:
 		return   # no save yet - keep the defaults
 	music_volume = clampf(float(cfg.get_value("audio", "music", DEFAULT_MUSIC)), 0.0, 1.0)
 	sfx_volume = clampf(float(cfg.get_value("audio", "sfx", DEFAULT_SFX)), 0.0, 1.0)
+	camera_tilt = clampf(float(cfg.get_value("view", "camera_tilt", DEFAULT_TILT)), -1.0, 1.0)
 
 
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("audio", "music", music_volume)
 	cfg.set_value("audio", "sfx", sfx_volume)
+	cfg.set_value("view", "camera_tilt", camera_tilt)
 	cfg.save(SAVE_PATH)
+	_tilt_dirty = 0.0

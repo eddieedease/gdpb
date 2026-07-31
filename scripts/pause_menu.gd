@@ -73,6 +73,15 @@ func _build() -> void:
 	_resume_btn = _add_button(buttons, "RESUME", _on_resume)
 	_add_button(buttons, "MENU", _on_menu)
 
+	# The camera pitch is adjusted live with the table in view, so it has no
+	# control here - but it is invisible until someone tells you it exists.
+	var cam_hint := Label.new()
+	cam_hint.text = "CAMERA ANGLE:  J / K  or the right stick, while playing"
+	cam_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cam_hint.add_theme_font_size_override("font_size", 20)
+	cam_hint.add_theme_color_override("font_color", MenuTheme.C_TURQ)
+	box.add_child(cam_hint)
+
 	var hint := Label.new()
 	hint.text = "Left/Right adjusts a slider    Esc resumes"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

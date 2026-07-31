@@ -171,6 +171,29 @@ void fragment() {
 @export var follow_speed := 6.0
 @export var camera_fov := 52.0
 
+## PLAYER-ADJUSTABLE PITCH (J/K, or the right stick up/down). Not a zoom - the
+## camera does not move closer or further along the table. Instead it drops and
+## raises its aim to swing between looking DOWN on the playfield and looking
+## along it toward the horizon. Both halves are needed: lowering the camera on
+## its own just crops the far end, and raising the aim on its own tips the table
+## out of frame. Held in Settings so it survives travelling between tables.
+@export_group("Camera tilt")
+## How far the camera drops (flat) or climbs (steep) at the extremes, in metres.
+@export var tilt_height := 4.6
+## View angle below horizontal at the two extremes, in degrees. The neutral angle
+## is whatever camera_height/camera_back/look_ahead already produce (about 34
+## degrees), and tilt eases between that and these. Expressed as an ANGLE rather
+## than as an aim offset because the aim height needed for a given angle depends
+## on how high the camera currently is - and the camera is moving at the same
+## time. A fixed offset overshot straight past the horizon at full flat.
+@export var tilt_pitch_flat := 11.0
+@export var tilt_pitch_steep := 54.0
+## Tilt units per second while the control is held; 1.0 = end to end in 2s.
+@export var tilt_speed := 0.9
+## The camera never drops below this, or it ends up inside the cabinet.
+@export var tilt_min_height := 2.6
+@export_group("")
+
 @onready var _vp: SubViewport = $GameViewport
 @onready var _cam: Camera3D = $Camera3D
 
@@ -2421,12 +2444,42 @@ func _process(delta: float) -> void:
 	var cam_h: float = lerpf(camera_height, multiball_camera_height, w)
 	var cam_back: float = lerpf(camera_back, multiball_camera_back, w)
 
+	# Player pitch. Positive = flat/toward the horizon: the camera drops AND its
+	# aim lifts off the playfield, which is what swings the view from looking
+	# down at the table to looking along it. Faded out during the multiball
+	# pull-out, which has its own framing job to do and shouldn't fight this.
+	var tilt := _read_tilt(delta) * (1.0 - w)
+	cam_h = maxf(cam_h - tilt * tilt_height, tilt_min_height)
+	# Aim height that produces the wanted angle from where the camera actually
+	# is. The horizontal run has to be measured, not assumed to be
+	# cam_back + look_ahead: camera_near_limit clamps the camera's depth
+	# independently of the ball's, so the two are only equal when the clamp is
+	# not biting. At tilt 0 the neutral pitch gives exactly aim_y = 0 either way,
+	# so the default framing is reproduced bit for bit.
+	var aim_z: float = lerpf(b.z - look_ahead, 0.0, w)
+	var aim_dist: float = maxf(cam_z + cam_back - aim_z, 0.5)
+	var base_pitch := atan2(cam_h, aim_dist)
+	var pitch: float = lerpf(base_pitch, deg_to_rad(tilt_pitch_flat), tilt) if tilt >= 0.0 \
+			else lerpf(base_pitch, deg_to_rad(tilt_pitch_steep), -tilt)
+	var aim_y: float = cam_h - aim_dist * tan(pitch)
+
 	var target := Vector3(cam_x, cam_h, cam_z + cam_back)
 	_cam.position = _cam.position.lerp(target, 1.0 - exp(-follow_speed * delta))
 	if _punch > 0.005:
 		_cam.position += Vector3(randf_range(-_punch, _punch), randf_range(-_punch, _punch), 0)
 		_punch = move_toward(_punch, 0.0, 2.2 * delta)
-	_cam.look_at(Vector3(cam_x, 0.0, lerpf(b.z - look_ahead, 0.0, w)))
+	_cam.look_at(Vector3(cam_x, aim_y, aim_z))
+
+
+## Current pitch, advanced by whatever the player is holding. Reads and writes
+## Settings so the choice carries across tables and restarts; Settings throttles
+## the actual file write, since this changes every frame while a key is held.
+func _read_tilt(delta: float) -> float:
+	var axis := Input.get_action_strength("camera_tilt_up") \
+			- Input.get_action_strength("camera_tilt_down")
+	if absf(axis) > 0.01:
+		Settings.set_camera_tilt(Settings.camera_tilt + axis * tilt_speed * delta)
+	return Settings.camera_tilt
 
 
 func _unhandled_input(event: InputEvent) -> void:
