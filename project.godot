@@ -38,9 +38,7 @@ window/stretch/aspect="keep_width"
 
 [gui]
 
-; Sets ThemeDB's fallback font, so every Control AND every Label3D picks it up
-; without each one having to ask for it.
-theme/custom_font="res://resources/font_body.tres"
+theme/custom_font="res://assets/fonts/Astron Boy.otf"
 
 [input]
 

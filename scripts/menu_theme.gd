@@ -12,10 +12,19 @@ const C_DEEP := Color(0.06, 0.09, 0.20)
 const C_CREAM := Color(1.0, 0.97, 0.92)
 const C_INK := Color(0.12, 0.05, 0.18)
 
-## The heavy cut, for anything that should shout rather than inform. The regular
-## weight is the project's default font (gui/theme/custom_font), so it needs no
-## reference here - only the display face has to be asked for.
-const DISPLAY_FONT := preload("res://resources/font_display.tres")
+## Astron Boy - a retro-futuristic display family, bundled in assets/fonts/ so it
+## ships with the game rather than depending on what the player has installed.
+## The upright cut is the project's default font (gui/theme/custom_font) and so
+## reaches every Control and Label3D on its own; it is named here only for the
+## places that build text without the theme.
+##
+## The family also has "Wonder" (outlined) and "Video" (scanline) cuts. Both look
+## great at marquee size and turn to mush below ~30px, so neither is wired in -
+## swap one in here if a screen wants that effect at a large size.
+const DISPLAY_FONT := preload("res://assets/fonts/Astron Boy.otf")
+## The slanted cut, for headings only. On a title the lean reads as speed, which
+## suits an arcade cabinet; on body text it just hurts legibility.
+const TITLE_FONT := preload("res://assets/fonts/Astron Boy Italic.otf")
 
 ## Sunset sky, banded sun and a scrolling perspective grid - all procedural, so
 ## the front end needs no art assets.
@@ -71,7 +80,7 @@ static func heading(text: String, size: int) -> Label:
 	var lbl := Label.new()
 	lbl.text = text
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_override("font", DISPLAY_FONT)
+	lbl.add_theme_font_override("font", TITLE_FONT)
 	lbl.add_theme_font_size_override("font_size", size)
 	lbl.add_theme_color_override("font_color", C_CREAM)
 	lbl.add_theme_color_override("font_shadow_color", C_CORAL)

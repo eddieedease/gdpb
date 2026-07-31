@@ -116,18 +116,9 @@ points = PackedVector2Array(250, 1440, 341, 1516)
 position = Vector2(3, -476)
 points = PackedVector2Array(1030, 1440, 994, 1409, 960.57117, 1457.3572, 910, 1470)
 
-[node name="Bumper0" parent="." unique_id=941541461 instance=ExtResource("7_t1bve")]
-modulate = Color(0.7, 0.85, 1, 1)
-position = Vector2(833.00006, 328.00003)
-rotation = 0.016346946
-
 [node name="Bumper1" parent="." unique_id=1606619932 instance=ExtResource("7_t1bve")]
 modulate = Color(1, 0.7, 0.8, 1)
 position = Vector2(388, 816)
-
-[node name="Bumper2" parent="." unique_id=1613699457 instance=ExtResource("7_t1bve")]
-modulate = Color(1, 0.85, 0.6, 1)
-position = Vector2(373, 321)
 
 [node name="Bumper3" parent="." unique_id=313051755 instance=ExtResource("7_t1bve")]
 modulate = Color(0.8, 1, 0.85, 1)

@@ -208,9 +208,10 @@ const COND_X := [-1.75, 1.15, 4.05]
 const COND_DONE_COLOR := Color(0.35, 1.0, 0.48)
 const COND_LANES_COLOR := Color(0.72, 0.62, 1.0)
 const MISSION_COLOR := Color(0.55, 0.92, 1.0)
-## Heavy cut for the backbox readout, the score popups and the completion
-## banner. Body text uses the project default font and needs no reference.
-const DISPLAY_FONT := preload("res://resources/font_display.tres")
+## The bundled display face, for the backbox readout, the score popups and the
+## completion banner. Label3D does not read the project theme, so unlike Controls
+## these have to be handed the font explicitly.
+const DISPLAY_FONT := preload("res://assets/fonts/Astron Boy.otf")
 var _targets: Array = []      # drop-target blocks; see _build_target_visuals
 var _lights: Array = []       # rollover discs; see _build_rollover_visuals
 var _spinners: Array = []   # spinner blades; see _build_spinner_visuals
