@@ -15,7 +15,13 @@ extends Node3D
 ## the projected playfield.
 
 const PX_PER_M := 100.0          # 2D pixels -> 3D metres
-const TABLE_SIZE := Vector2(1280, 2560)
+
+## Playfield size in 2D pixels. Everything 3D is derived from it - the render
+## viewport, the projected quad, the cabinet, the camera limits - so a table can
+## be a different SHAPE simply by setting this on its view. A bonus table is
+## meant to be a short side room rather than a second full playfield, and it
+## cannot be one while this is a constant.
+@export var table_size := Vector2(1280, 2560)
 
 ## Physics layer 9: the upper deck, a genuinely separate level. Deck pieces
 ## (its flippers, targets and cage walls) live on this layer ALONE, and a ball
@@ -221,6 +227,10 @@ func _ready() -> void:
 	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP_WIDTH
 	win.content_scale_size = Vector2i(1280, 720)
 
+	# The render target must match the playfield it is rendering. Derived rather
+	# than set in the scene so a table's size lives in exactly one place.
+	_vp.size = Vector2i(table_size)
+
 	var table := _vp.get_node("Table")
 
 	# The surround under everything - it shows in the apron, the margin the
@@ -231,7 +241,7 @@ func _ready() -> void:
 	# tree order and a z=0 rect would paint straight over a z=-100 sprite.
 	# That mismatch is invisible in the editor, where this node doesn't exist.
 	var surface := ColorRect.new()
-	surface.size = TABLE_SIZE
+	surface.size = table_size
 	surface.z_index = -1000
 	var apron_sh := Shader.new()
 	apron_sh.code = APRON_SHADER
@@ -240,7 +250,7 @@ func _ready() -> void:
 	apron_mat.set_shader_parameter("base_color", _v3(board_color))
 	apron_mat.set_shader_parameter("rim_color", _v3(accent_cool))
 	apron_mat.set_shader_parameter("sheen_color", _v3(accent_bright))
-	apron_mat.set_shader_parameter("table_size", TABLE_SIZE)
+	apron_mat.set_shader_parameter("table_size", table_size)
 	apron_mat.set_shader_parameter("art_rect", _playfield_art_rect(table))
 	surface.material = apron_mat
 	_vp.add_child(surface)
@@ -1014,7 +1024,7 @@ func _rehome_physics(node: Node, space: RID) -> void:
 func _add_shadow(tex: Texture2D, height: float, reach_factor: float) -> void:
 	var mesh := MeshInstance3D.new()
 	var quad := QuadMesh.new()
-	quad.size = TABLE_SIZE / PX_PER_M
+	quad.size = table_size / PX_PER_M
 	mesh.mesh = quad
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -1031,7 +1041,7 @@ func _add_shadow(tex: Texture2D, height: float, reach_factor: float) -> void:
 func _add_screen(tex: Texture2D, height: float, transparent: bool) -> void:
 	var mesh := MeshInstance3D.new()
 	var quad := QuadMesh.new()
-	quad.size = TABLE_SIZE / PX_PER_M
+	quad.size = table_size / PX_PER_M
 	mesh.mesh = quad
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -1078,8 +1088,8 @@ func _build_environment() -> void:
 
 
 func _build_cabinet() -> void:
-	var w := TABLE_SIZE.x / PX_PER_M      # 12.8
-	var l := TABLE_SIZE.y / PX_PER_M      # 25.6
+	var w := table_size.x / PX_PER_M      # 12.8
+	var l := table_size.y / PX_PER_M      # 25.6
 	var body_col := cabinet_color
 	var rail_col := rail_color
 	var neon := accent_cool
@@ -1155,6 +1165,7 @@ func _build_backbox_display(l: float) -> void:
 	GameManager.multiball_changed.connect(_on_multiball_changed)
 	GameManager.mission_progress.connect(_on_mission_progress)
 	GameManager.mission_completed.connect(_on_mission_completed)
+	GameManager.ball_arrived.connect(_on_ball_arrived)
 	_on_score_changed(GameManager.score)
 	_on_balls_changed(GameManager.balls_left)
 	_on_multiball_progress(0, 0, 0)
@@ -1253,14 +1264,77 @@ func _on_mission_completed(title: String) -> void:
 		_mission_tween = create_tween().set_loops()
 		_mission_tween.tween_property(_mission_label, "modulate", COND_DONE_COLOR, 0.3)
 		_mission_tween.tween_property(_mission_label, "modulate", accent_bright, 0.3)
+	# Beam every ball on the table out. This is the moment the player leaves, so
+	# the ball leaving with them is what sells the table swap as travel rather
+	# than as a scene change.
+	for b in get_tree().get_nodes_in_group("ball"):
+		if is_instance_valid(b):
+			_teleport_effect(_table_to_world(b.global_position), true)
 	_mission_banner(title)
 	_confetti_waves()
+
+
+func _on_ball_arrived(at: Vector2) -> void:
+	_teleport_effect(_table_to_world(at), false)
+	GameManager.impact.emit(7.0)
+
+
+## Beam the ball in or out: a column of light, an expanding ring on the board and
+## a rush of sparks. `outward` runs it in reverse (collapsing rather than
+## blooming) so arriving and departing read as opposites.
+func _teleport_effect(at: Vector3, outward: bool) -> void:
+	var beam := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 0.16
+	cyl.bottom_radius = 0.16
+	cyl.height = 3.0
+	beam.mesh = cyl
+	var bmat := StandardMaterial3D.new()
+	bmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	bmat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	bmat.albedo_color = Color(accent_bright.r, accent_bright.g, accent_bright.b, 0.85)
+	bmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	beam.material_override = bmat
+	beam.position = at + Vector3(0, 1.5, 0)
+	add_child(beam)
+
+	var ring := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.18
+	torus.outer_radius = 0.26
+	ring.mesh = torus
+	var rmat := StandardMaterial3D.new()
+	rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	rmat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	rmat.albedo_color = Color(accent_cool.r, accent_cool.g, accent_cool.b, 0.9)
+	ring.material_override = rmat
+	ring.position = at + Vector3(0, 0.06, 0)
+	add_child(ring)
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+	if outward:
+		beam.scale = Vector3(1, 1, 1)
+		tw.tween_property(beam, "scale", Vector3(0.05, 1.6, 0.05), 0.45).set_ease(Tween.EASE_IN)
+		tw.tween_property(ring, "scale", Vector3(4.5, 1, 4.5), 0.45).set_ease(Tween.EASE_OUT)
+	else:
+		beam.scale = Vector3(0.05, 1.6, 0.05)
+		tw.tween_property(beam, "scale", Vector3.ONE, 0.35).set_ease(Tween.EASE_OUT)
+		ring.scale = Vector3(4.5, 1, 4.5)
+		tw.tween_property(ring, "scale", Vector3.ONE, 0.35).set_ease(Tween.EASE_OUT)
+	tw.tween_property(bmat, "albedo_color:a", 0.0, 0.5)
+	tw.tween_property(rmat, "albedo_color:a", 0.0, 0.5)
+	tw.chain().tween_callback(beam.queue_free)
+	tw.tween_callback(ring.queue_free)
+	SoundManager.play("whoosh", 1.45 if outward else 0.85)
 
 
 func _mission_banner(title: String) -> void:
 	# Over the middle of the playfield, which is dark - further up the table the
 	# banner lands on the brightly lit deck and loses its contrast.
-	var centre := _table_to_world(Vector2(TABLE_SIZE.x * 0.5, TABLE_SIZE.y * 0.6))
+	var centre := _table_to_world(Vector2(table_size.x * 0.5, table_size.y * 0.6))
 	var lbl := Label3D.new()
 	lbl.text = "%s\nCOMPLETE" % title
 	lbl.font_size = 170
@@ -1279,29 +1353,30 @@ func _mission_banner(title: String) -> void:
 	add_child(lbl)
 
 	var tw := create_tween()
-	tw.tween_property(lbl, "scale", Vector3.ONE * 1.15, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(lbl, "scale", Vector3.ONE, 0.15)
-	tw.tween_interval(2.9)
-	tw.tween_property(lbl, "modulate:a", 0.0, 0.5)
+	tw.tween_property(lbl, "scale", Vector3.ONE * 1.15, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(lbl, "scale", Vector3.ONE, 0.1)
+	tw.tween_interval(0.7)
+	tw.tween_property(lbl, "modulate:a", 0.0, 0.3)
 	tw.tween_callback(lbl.queue_free)
 
 	# A slow drift upward underneath, so the banner never sits dead still.
 	var rise := create_tween()
-	rise.tween_property(lbl, "position:y", 4.3, 4.0).set_ease(Tween.EASE_OUT)
+	rise.tween_property(lbl, "position:y", 4.0, 1.4).set_ease(Tween.EASE_OUT)
 
 
-## Confetti fired in waves from spots across the playfield, rather than one burst
-## at one point the way a bank clear does.
+## Confetti fired from spots across the playfield, rather than one burst at one
+## point the way a bank clear does. Two quick waves, not a long show - the whole
+## celebration has to be over in well under two seconds.
 func _confetti_waves() -> void:
 	var spots := [Vector2(0.5, 0.25), Vector2(0.18, 0.5), Vector2(0.82, 0.5),
 			Vector2(0.35, 0.75), Vector2(0.65, 0.75), Vector2(0.5, 0.45)]
-	for wave in 3:
+	for wave in 2:
 		for s in spots:
 			if not is_inside_tree():
 				return
-			_on_bank_completed(Vector2(s.x * TABLE_SIZE.x, s.y * TABLE_SIZE.y))
+			_on_bank_completed(Vector2(s.x * table_size.x, s.y * table_size.y))
 		GameManager.impact.emit(9.0)
-		await get_tree().create_timer(0.75).timeout
+		await get_tree().create_timer(0.35).timeout
 	_party = false
 
 
@@ -1946,7 +2021,7 @@ func _playfield_art_rect(table: Node) -> Vector4:
 
 
 func _table_to_world(p: Vector2) -> Vector3:
-	return Vector3((p.x - TABLE_SIZE.x * 0.5) / PX_PER_M, 0.0, (p.y - TABLE_SIZE.y * 0.5) / PX_PER_M)
+	return Vector3((p.x - table_size.x * 0.5) / PX_PER_M, 0.0, (p.y - table_size.y * 0.5) / PX_PER_M)
 
 
 # ---------------------------------------------------------------- 3D walls
@@ -2275,15 +2350,16 @@ func _process(delta: float) -> void:
 	# the bottom of the table, and cut the main flippers out of frame - they
 	# sit at almost exactly the same depth as the shooter lane, so the cap
 	# applies just as much when you are actually playing them.
-	var follow_z := clampf(b.z, -TABLE_SIZE.y * 0.5 / PX_PER_M, camera_near_limit)
+	var follow_z := clampf(b.z, -table_size.y * 0.5 / PX_PER_M, camera_near_limit)
 
 	# During multiball, ease out to a fixed wide view of the whole table -
 	# chasing one ball of three means the other two are off-screen, which is
 	# exactly the moment you most need to see them. Eases back to tracking on
-	# its own once the last extra ball drains. The mission-complete party borrows
-	# the same pull-out: the confetti goes up across the whole field, so a camera
-	# still glued to one ball would show almost none of it.
-	_wide = move_toward(_wide, 1.0 if (_multiball_lit or _party) else 0.0, delta / multiball_zoom_time)
+	# its own once the last extra ball drains. Deliberately NOT used by the
+	# mission-complete party any more: easing out and back cost well over a second
+	# on its own, and travelling to the next table should feel like stepping into
+	# the next room, not like sitting through a cutscene.
+	_wide = move_toward(_wide, 1.0 if _multiball_lit else 0.0, delta / multiball_zoom_time)
 	var w: float = smoothstep(0.0, 1.0, _wide)
 	var cam_x: float = lerpf(b.x, 0.0, w)
 	var cam_z: float = lerpf(follow_z, 0.0, w)

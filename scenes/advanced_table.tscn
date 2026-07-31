@@ -63,7 +63,7 @@ point_count = 4
 script = ExtResource("1_00vba")
 launch_max_speed = 4000.0
 mission_title = "NEON RUN"
-mission_score = 250000
+mission_score = 165000
 next_table = "res://scenes/crush_view2.tscn"
 
 [node name="PlayfieldArt" type="Sprite2D" parent="." unique_id=800000010]
@@ -89,6 +89,9 @@ script = ExtResource("2_0ua1b")
 
 [node name="BallSpawn" type="Marker2D" parent="." unique_id=257382769]
 position = Vector2(1120, 2360)
+
+[node name="BallEntry" type="Marker2D" parent="."]
+position = Vector2(640, 300)
 
 [node name="WallLeft" parent="." unique_id=1669833305 instance=ExtResource("5_6qs8c")]
 points = PackedVector2Array(470, 2400, 150, 2010, 110, 1900, 110, 300, 111.195, 278.727, 114.764, 257.721, 120.662, 237.247, 128.816, 217.562, 139.122, 198.914, 151.452, 181.537, 165.65, 165.65, 181.537, 151.452, 198.914, 139.122, 217.562, 128.816, 237.247, 120.662, 257.721, 114.764, 278.727, 111.195, 300, 110)
@@ -237,8 +240,6 @@ curve = SubResource("Curve2D_ai1wt")
 channel_width = 50.0
 mouth_flare = 0.885
 smoothness = 2.982
-guide_strength = 6.0
-centering = 8.0
 
 [node name="Rail" parent="." unique_id=470856065 instance=ExtResource("16_rail")]
 position = Vector2(215.99998, 1345)

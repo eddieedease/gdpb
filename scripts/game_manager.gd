@@ -17,6 +17,9 @@ signal multiball_changed(active: bool)
 ## The current table's mission. `items` is a list of [label, got, needed].
 signal mission_progress(title: String, items: Array)
 signal mission_completed(title: String)
+## A ball has just been fed in from another table, at this playfield position.
+## The 3D view beams it in there.
+signal ball_arrived(at: Vector2)
 
 ## Set while travelling from one table to the next. It tells the arriving table
 ## two things: keep the score and balls (this is the same game continuing, not a

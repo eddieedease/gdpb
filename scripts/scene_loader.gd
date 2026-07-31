@@ -19,6 +19,11 @@ const MenuTheme := preload("res://scripts/menu_theme.gd")
 ## better to show it deliberately or not at all.
 const MIN_VISIBLE := 0.5
 const FADE := 0.16
+## Table-to-table travel mid-game is not "leaving for somewhere else", it is more
+## like walking into the next room, so it gets the shortest cover that still
+## hides the swap instead of the full deliberate loading screen.
+const QUICK_MIN_VISIBLE := 0.12
+const QUICK_FADE := 0.07
 
 var _root: Control
 var _bar_fill: ColorRect
@@ -82,8 +87,11 @@ func _set_progress(frac: float, text: String) -> void:
 		_status.text = text
 
 
-## Swap to `path` behind the overlay.
-func goto(path: String) -> void:
+## Swap to `path` behind the overlay. Pass `quick` for a transition that happens
+## DURING play (travelling between tables) rather than between one part of the
+## game and another - it uses a much shorter hold and fade so the game gets back
+## under the player's hands as fast as the load allows.
+func goto(path: String, quick := false) -> void:
 	if _busy:
 		return
 	_busy = true
@@ -91,12 +99,15 @@ func goto(path: String) -> void:
 	# the progress polling.
 	get_tree().paused = false
 
+	var fade: float = QUICK_FADE if quick else FADE
+	var hold: float = QUICK_MIN_VISIBLE if quick else MIN_VISIBLE
+
 	_set_progress(0.0, "")
 	_root.visible = true
 	_root.modulate.a = 0.0
 	var shown_at := Time.get_ticks_msec()
 	var tw := create_tween()
-	tw.tween_property(_root, "modulate:a", 1.0, FADE)
+	tw.tween_property(_root, "modulate:a", 1.0, fade)
 	await tw.finished
 
 	var packed: PackedScene = await _load_threaded(path)
@@ -120,11 +131,11 @@ func goto(path: String) -> void:
 	# the ball in from the top, the player misses the start of their own shot.
 	# Safe because this overlay runs with PROCESS_MODE_ALWAYS.
 	get_tree().paused = true
-	while Time.get_ticks_msec() - shown_at < int(MIN_VISIBLE * 1000.0):
+	while Time.get_ticks_msec() - shown_at < int(hold * 1000.0):
 		await get_tree().process_frame
 
 	var out := create_tween()
-	out.tween_property(_root, "modulate:a", 0.0, FADE)
+	out.tween_property(_root, "modulate:a", 0.0, fade)
 	await out.finished
 	get_tree().paused = false
 	_root.visible = false

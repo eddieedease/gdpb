@@ -6,13 +6,14 @@
 
 [node name="CrushView" type="Node3D"]
 script = ExtResource("1")
+table_size = Vector2(1280, 1500)
 backbox_title = "THE VAULT"
 board_color = Color(0.74, 0.79, 0.82, 1)
 accent_warm = Color(0.4, 0.95, 0.75, 1)
 accent_cool = Color(0.45, 0.7, 1, 1)
 
 [node name="GameViewport" type="SubViewport" parent="."]
-size = Vector2i(1280, 2560)
+size = Vector2i(1280, 1500)
 render_target_update_mode = 4
 
 [node name="Table" parent="GameViewport" instance=ExtResource("2")]

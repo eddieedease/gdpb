@@ -37,15 +37,28 @@ var _bit := 0
 	set(v):
 		smoothness = v
 		_refresh()
+## Recolour this channel from its ROOT node, so it can be done the same way a
+## flipper is - select the piece, pick a colour. The colour lives on the two
+## child Line2Ds, which is where both the 2D editor view and the 3D tube read it
+## from, but those are inside an instanced sub-scene and awkward to reach.
+## Alpha 0 (the default) means "leave the child lines alone", which is what keeps
+## rails blue and ramps orange out of the box.
+@export var channel_color := Color(0, 0, 0, 0):
+	set(v):
+		channel_color = v
+		_refresh()
 @export var wall_bounce := 0.15
 ## Points awarded once each time a ball boards the ramp (0 = no scoring).
 @export var ramp_score := 2000
 
-## The "sucked in" feel: while captured, the ball is steered along the curve
-## (speed preserved), pulled gently to the centreline, and gravity inside the
-## channel is reduced so momentum carries it through climbs.
-@export var guide_strength := 9.0
-@export var centering := 16.0
+## The "sucked in" feel: while captured, the ball is LOCKED to the curve - its
+## velocity is aligned to the channel and it is held on the centreline - and
+## gravity inside the channel is reduced so momentum carries it through climbs.
+## Both rates are per-second and applied as 1 - exp(-rate * delta), so they mean
+## the same thing at any frame rate. High on purpose: a loosely-held ball weaves
+## into the walls, and every graze costs speed to friction and the wall bounce.
+@export var guide_strength := 26.0
+@export var centering := 26.0
 @export var channel_gravity := 250.0
 ## Minimum capture speed for the whoosh sound - a slow dribble that rolls
 ## back out of the mouth stays silent.
@@ -127,6 +140,12 @@ func _refresh() -> void:
 		widths.append(lerpf(mouth_flare, 1.0, sm) * channel_width * 0.5)
 	_left.points = _offset_var(center, widths, 1.0)
 	_right.points = _offset_var(center, widths, -1.0)
+	# Push the root's colour down onto the lines. crush_view builds the 3D tube
+	# from `Left.default_color`, so doing it here means the editor view and the
+	# tube can never disagree - there is only ever one source of truth.
+	if channel_color.a > 0.0:
+		_left.default_color = channel_color
+		_right.default_color = channel_color
 
 
 func _offset_var(pts: PackedVector2Array, widths: PackedFloat32Array, side: float) -> PackedVector2Array:
@@ -291,6 +310,23 @@ func _on_mouth_entered(body: Node, inward: Vector2, mouth_pos: Vector2) -> void:
 			lateral = absf((rel + v * t).dot(normal))
 	if lateral > channel_width * max_board_offset:
 		return
+	# Redirect the shot along the channel, keeping the speed it arrived with.
+	# Previously the ball kept whatever velocity it had and the per-frame guide
+	# projected it onto the channel axis, which charged the player cos(angle) of
+	# their speed for entering even slightly off-line - a hard shot visibly died
+	# part way up a rail. The boarding gates above already guarantee this ball was
+	# aimed into the mouth, so there is no drifting ball to protect against here.
+	# The 1.35 cap stops a steeply-angled entry from converting a big sideways
+	# component into free forward speed.
+	var along_in: float = maxf(v.dot(inward), 0.0)
+	var board_speed: float = minf(speed, along_in * 1.35)
+	body.linear_velocity = inward * board_speed
+	# From here the ball's speed along the channel is tracked EXPLICITLY (see
+	# _physics_process) and engine gravity is switched off for it, so the two
+	# cannot both act on it.
+	body.set_meta("channel_speed", board_speed * signf(inward.dot(_forward_at(body))))
+	body.set_meta("channel_gravity_scale", body.gravity_scale)
+	body.gravity_scale = 0.0
 	# board the ramp -> ride over the playfield (but keep colliding with the
 	# ramp walls so it stays guided)
 	body.collision_layer = _bit
@@ -311,6 +347,17 @@ func _on_mouth_entered(body: Node, inward: Vector2, mouth_pos: Vector2) -> void:
 	# NOTE: no score here. A channel pays out for being RIDDEN END TO END, which
 	# is the shot worth making - see _release(). Scoring on entry paid out for
 	# merely nudging a mouth.
+
+
+## Unit vector along the curve in the direction of INCREASING offset, at the
+## point nearest `body`. The sign of the ball's tracked speed is relative to it.
+func _forward_at(body: Node2D) -> Vector2:
+	var off := curve.get_closest_offset(to_local(body.global_position))
+	var length := curve.get_baked_length()
+	var ahead := curve.sample_baked(minf(off + 8.0, length))
+	var behind := curve.sample_baked(maxf(off - 8.0, 0.0))
+	var d := to_global(ahead) - to_global(behind)
+	return d.normalized() if d.length_squared() > 0.0001 else Vector2.RIGHT
 
 
 func _on_field_exited(body: Node) -> void:
@@ -346,6 +393,7 @@ func _release(body: Node) -> void:
 	body.z_index = 0
 	body.set_meta("on_ramp", false)
 	body.set_meta("channel", null)
+	body.gravity_scale = body.get_meta("channel_gravity_scale", 1.0)
 	_riding.erase(body)
 	var rode_through := absf(off - entry_off) > length * 0.5
 	# Pay out only for a completed run: the ball went in one mouth and came
@@ -371,8 +419,9 @@ func _physics_process(delta: float) -> void:
 			_riding.erase(ball)
 			continue
 		var speed: float = ball.linear_velocity.length()
-		if speed < 80.0:
-			continue
+		# NOTE: no low-speed bail-out here. With the ball constrained to the curve
+		# and engine gravity off, skipping the update would strand a ball that
+		# stalled part way up a climb instead of letting gravity roll it back out.
 		# Direction of the channel at the ball's position (in global space).
 		var local := to_local(ball.global_position)
 		var off := curve.get_closest_offset(local)
@@ -433,9 +482,27 @@ func _physics_process(delta: float) -> void:
 		# momentum, so a ball drifting across a mouth got launched up a climb
 		# it never had the pace for. A ball genuinely shot into the mouth is
 		# already aligned, so for real shots this changes nothing.
-		var along: float = ball.linear_velocity.dot(tangent)
-		var target: Vector2 = tangent * along
-		ball.linear_velocity = ball.linear_velocity.lerp(target, clampf(guide_strength * delta, 0.0, 1.0))
-		# Gentle pull toward the centreline.
-		var to_center: Vector2 = to_global(curve.sample_baked(off)) - ball.global_position
-		ball.linear_velocity += to_center * centering * delta
+		# A riding ball is CONSTRAINED to the channel, the way a real wireform
+		# constrains one, rather than nudged toward it. Its speed along the curve
+		# is tracked explicitly and only gravity's component ALONG the curve
+		# changes it; the rail takes the rest, and engine gravity is switched off
+		# for the ball while it rides so the two cannot both act.
+		#
+		# The previous version projected the ball's velocity onto the tangent each
+		# frame. On any bend that quietly bleeds |v|*(1 - cos(dtheta)) of speed per
+		# step, because the velocity direction always lags the rotating tangent -
+		# which is why a hard shot arrived at the far end of a curved rail with
+		# barely half the speed it went in with, and why the rail felt like it
+		# wasn't holding the ball.
+		var cs: float = ball.get_meta("channel_speed", ball.linear_velocity.dot(tangent))
+		cs += channel_gravity * tangent.y * delta
+		ball.set_meta("channel_speed", cs)
+		ball.linear_velocity = ball.linear_velocity.lerp(tangent * cs, 1.0 - exp(-guide_strength * delta))
+		# HOLD the ball on the centreline by correcting its POSITION rather than
+		# pushing it there with velocity. A velocity nudge overshoots, so the ball
+		# weaves from wall to wall and every graze costs friction and bounce.
+		# The closest point on the curve is by definition perpendicular to the
+		# tangent, so this only moves the ball ACROSS the channel and never drags
+		# it backwards along it.
+		var centre: Vector2 = to_global(curve.sample_baked(off))
+		ball.global_position = ball.global_position.lerp(centre, 1.0 - exp(-centering * delta))

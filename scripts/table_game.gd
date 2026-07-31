@@ -15,6 +15,10 @@ const BALL_SCENE := preload("res://scenes/ball.tscn")
 @export var launch_direction := Vector2(-0.04, -1.0)
 ## Sideways shove applied to the ball(s) by a nudge (Q/E or the sticks).
 @export var nudge_impulse := 320.0
+## The playable box. Any ball outside it is treated as escaped and drained - see
+## _out_of_bounds. Defaults to the standard 1280x2560 playfield; a table of a
+## different size MUST set this to match its own.
+@export var table_bounds := Rect2(55, 55, 1180, 2565)
 
 ## One-way gate (scenes/gate.tscn) dropped at the mouth of the shooter lane:
 ## the ball passes up through it on launch, then can never fall back in. Tilt
@@ -22,6 +26,9 @@ const BALL_SCENE := preload("res://scenes/ball.tscn")
 const GATE_SCENE := preload("res://scenes/gate.tscn")
 @export var gate_position := Vector2(1115, 1895)
 @export var gate_rotation := -0.12
+## Off for a table with no shooter lane (a bonus table the ball is fed into),
+## where a gate would just be a stray barrier floating in the playfield.
+@export var build_lane_gate := true
 
 @onready var _spawn: Node2D = $BallSpawn
 @onready var _drain: Area2D = $Drain
@@ -81,7 +88,9 @@ var _multiball := false
 @export var mission_lane_clears := 0
 @export var mission_bonus := 25000
 ## How long the celebration runs before the table hands over to the next one.
-@export var mission_celebration_time := 5.0
+## Kept SHORT on purpose: travelling should feel like stepping into the next
+## room mid-game, not like sitting through a cutscene.
+@export var mission_celebration_time := 1.4
 ## Where finishing the mission sends the player. Empty = this is the last table,
 ## so the mission just pays out and the table keeps going.
 @export_file("*.tscn") var next_table := ""
@@ -89,6 +98,13 @@ var _multiball := false
 ## another table. Falls back to the shooter lane if the table has no such node.
 @export var entry_node := "BallEntry"
 @export var entry_velocity := Vector2(0, 420)
+## Set on a BONUS table: draining here drops the player back onto that table
+## instead of costing a ball. It turns this table into a side room you can fall
+## out of rather than a place you can lose the game.
+@export_file("*.tscn") var return_table := ""
+## Whether falling out of a bonus table still costs a ball. Off by default -
+## a bonus round that can end your game is a punishment, not a reward.
+@export var return_costs_ball := false
 @export_group("")
 
 var _m_rides := 0
@@ -193,7 +209,7 @@ func _cheat_score() -> void:
 
 func _build_gate() -> void:
 	# Skip if the scene already contains a hand-placed gate node.
-	if has_node("LaneGate"):
+	if not build_lane_gate or has_node("LaneGate"):
 		return
 	var gate: Node2D = GATE_SCENE.instantiate()
 	gate.name = "LaneGate"
@@ -214,6 +230,9 @@ func _spawn_ball() -> void:
 		ball.position = entry.global_position
 		add_child(ball)
 		ball.linear_velocity = entry_velocity
+		# Deferred: the 3D view connects to this in its own _ready, which runs
+		# AFTER the table's (a child is ready before its parent).
+		GameManager.ball_arrived.emit.call_deferred(entry.global_position)
 	else:
 		GameManager.arriving_from_table = false
 		ball.position = _spawn.global_position
@@ -245,6 +264,9 @@ func _physics_process(delta: float) -> void:
 		b.z_index = 0
 		b.set_meta("on_ramp", false)
 		b.set_meta("on_deck", false)
+		# A ball rescued mid-ride never ran the channel's own release, which is
+		# what normally puts its gravity back - without this it would float.
+		b.gravity_scale = 1.0
 		_on_drain_body_entered(b)
 
 	var ball := _get_ball()
@@ -274,13 +296,13 @@ func _nudge(dir: float) -> void:
 
 
 ## Outside the playable area. The margin is deliberately tight around the wall
-## perimeter (walls run x 110..1170): the old test only fired once the ball was
-## right off the 1280x2560 board, so a ball that punched through a side wall and
-## came to rest in the dead space beyond it was never caught and simply sat
-## there, out of play.
+## perimeter (walls run x 110..1170): an earlier test only fired once the ball was
+## right off the board, so a ball that punched through a side wall and came to
+## rest in the dead space beyond it was never caught and simply sat there, out of
+## play. A table that is not the standard 1280x2560 must set this to match, or
+## its whole lower half counts as out of bounds.
 func _out_of_bounds(ball: RigidBody2D) -> bool:
-	var p := ball.global_position
-	return p.x < 55.0 or p.x > 1235.0 or p.y < 55.0 or p.y > 2620.0
+	return not table_bounds.has_point(ball.global_position)
 
 
 func _on_drain_body_entered(body: Node) -> void:
@@ -298,10 +320,44 @@ func _on_drain_body_entered(body: Node) -> void:
 			_end_multiball()
 		return
 	_end_multiball()
+	# A bonus table has somewhere to fall back TO. Losing the ball here just ends
+	# the visit and drops the player back on the main table, still in play.
+	if return_table != "" and not GameManager.is_game_over:
+		if return_costs_ball:
+			GameManager.lose_ball()
+			if GameManager.is_game_over:
+				return
+		_travel_to(return_table)
+		return
 	GameManager.lose_ball()
 	if not GameManager.is_game_over:
 		await get_tree().create_timer(0.9).timeout
 		_spawn_ball()
+
+
+## Take every ball out of play as it beams out. Emitting the completion and
+## leaving the balls live meant they carried on rolling around underneath the
+## celebration - and could even reach the drain, costing a ball on the way to a
+## reward. Frozen and out of the group first (which is what the drain and the
+## out-of-bounds net both test), then freed a beat later so they vanish with the
+## beam rather than popping out before it starts.
+func _beam_out_balls() -> void:
+	for b in get_tree().get_nodes_in_group("ball"):
+		if not is_instance_valid(b):
+			continue
+		b.remove_from_group("ball")
+		b.linear_velocity = Vector2.ZERO
+		b.angular_velocity = 0.0
+		b.freeze = true
+		get_tree().create_timer(0.35).timeout.connect(b.queue_free)
+
+
+## Hand the player over to another table, keeping their game. The flag is what
+## tells the arriving table to keep the score and feed the ball in at its entry
+## point rather than putting them back in the shooter lane.
+func _travel_to(path: String) -> void:
+	GameManager.arriving_from_table = true
+	SceneLoader.goto(path, true)
 
 
 ## Let the final score sit on screen for a moment, then hand over to the high
@@ -391,15 +447,13 @@ func _complete_mission() -> void:
 	_mission_done = true
 	GameManager.add_score(mission_bonus, _spawn.global_position)
 	GameManager.mission_completed.emit(mission_title)
+	_beam_out_balls()
 	SoundManager.play("launch", 0.8)
 	GameManager.impact.emit(16.0)
 	await get_tree().create_timer(mission_celebration_time).timeout
 	if not is_inside_tree() or GameManager.is_game_over or next_table == "":
 		return
-	# Travel on. The flag is what tells the next table to keep the score and to
-	# feed the ball in at its entry point.
-	GameManager.arriving_from_table = true
-	SceneLoader.goto(next_table)
+	_travel_to(next_table)
 
 
 ## Bank clears build toward multiball, but ONLY while it is inactive - during
