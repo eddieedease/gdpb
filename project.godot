@@ -36,6 +36,12 @@ window/size/mode=3
 window/stretch/mode="canvas_items"
 window/stretch/aspect="keep_width"
 
+[gui]
+
+; Sets ThemeDB's fallback font, so every Control AND every Label3D picks it up
+; without each one having to ask for it.
+theme/custom_font="res://resources/font_body.tres"
+
 [input]
 
 flipper_left={

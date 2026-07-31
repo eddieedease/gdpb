@@ -85,12 +85,20 @@ func _ready() -> void:
 	scores_btn.pressed.connect(_on_high_scores)
 	box.add_child(scores_btn)
 
+	var quit_btn := Button.new()
+	quit_btn.text = "QUIT"
+	quit_btn.custom_minimum_size = Vector2(560, 60)
+	quit_btn.add_theme_font_size_override("font_size", 24)
+	MenuTheme.style_button(quit_btn)
+	quit_btn.pressed.connect(_on_quit)
+	box.add_child(quit_btn)
+
 	var spacer2 := Control.new()
 	spacer2.custom_minimum_size = Vector2(0, 18)
 	box.add_child(spacer2)
 
 	var hint := Label.new()
-	hint.text = "Arrow keys / mouse to choose    Enter to play    Esc returns here"
+	hint.text = "Arrow keys / mouse to choose    Enter to play    Esc quits from here"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_font_size_override("font_size", 19)
 	hint.add_theme_color_override("font_color", MenuTheme.C_CREAM)
@@ -118,3 +126,18 @@ func _on_table_chosen(scene_path: String) -> void:
 
 func _on_high_scores() -> void:
 	SceneLoader.goto("res://scenes/high_scores.tscn")
+
+
+## Esc on the title screen quits too - it is the top of the menu tree, so there
+## is nowhere left to back out to.
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel"):
+		get_viewport().set_input_as_handled()
+		_on_quit()
+
+
+func _on_quit() -> void:
+	# Let the settings file and anything else mid-write finish, then close the
+	# window properly rather than killing the process - quit() runs the normal
+	# shutdown, so autoloads get their notifications.
+	get_tree().quit()

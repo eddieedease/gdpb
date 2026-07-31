@@ -19,6 +19,10 @@ var _mission_done := false
 
 
 func _ready() -> void:
+	# The three labels from hud.tscn are the loud kind, so they take the heavy
+	# cut. Done here rather than in the scene so there is one place that decides.
+	for lbl in [score_label, balls_label, message_label]:
+		lbl.add_theme_font_override("font", MenuTheme.DISPLAY_FONT)
 	_build_mission_bar()
 	GameManager.score_changed.connect(_on_score_changed)
 	GameManager.balls_changed.connect(_on_balls_changed)
@@ -58,6 +62,7 @@ func _build_mission_bar() -> void:
 	_mission_label.offset_top = 12.0
 	_mission_label.offset_bottom = 44.0
 	_mission_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_mission_label.add_theme_font_override("font", MenuTheme.DISPLAY_FONT)
 	_mission_label.add_theme_font_size_override("font_size", 24)
 	_mission_label.add_theme_color_override("font_color", MenuTheme.C_CREAM)
 	_mission_label.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.1))

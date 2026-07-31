@@ -12,6 +12,11 @@ const C_DEEP := Color(0.06, 0.09, 0.20)
 const C_CREAM := Color(1.0, 0.97, 0.92)
 const C_INK := Color(0.12, 0.05, 0.18)
 
+## The heavy cut, for anything that should shout rather than inform. The regular
+## weight is the project's default font (gui/theme/custom_font), so it needs no
+## reference here - only the display face has to be asked for.
+const DISPLAY_FONT := preload("res://resources/font_display.tres")
+
 ## Sunset sky, banded sun and a scrolling perspective grid - all procedural, so
 ## the front end needs no art assets.
 const MENU_SHADER := "
@@ -66,6 +71,7 @@ static func heading(text: String, size: int) -> Label:
 	var lbl := Label.new()
 	lbl.text = text
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_override("font", DISPLAY_FONT)
 	lbl.add_theme_font_size_override("font_size", size)
 	lbl.add_theme_color_override("font_color", C_CREAM)
 	lbl.add_theme_color_override("font_shadow_color", C_CORAL)
@@ -96,6 +102,7 @@ static func style_button(btn: Button) -> void:
 	focus.border_color = C_SUN
 	focus.set_border_width_all(4)
 
+	btn.add_theme_font_override("font", DISPLAY_FONT)
 	btn.add_theme_stylebox_override("normal", normal)
 	btn.add_theme_stylebox_override("hover", hover)
 	btn.add_theme_stylebox_override("pressed", focus)

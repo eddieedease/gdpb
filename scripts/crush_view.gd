@@ -208,6 +208,9 @@ const COND_X := [-1.75, 1.15, 4.05]
 const COND_DONE_COLOR := Color(0.35, 1.0, 0.48)
 const COND_LANES_COLOR := Color(0.72, 0.62, 1.0)
 const MISSION_COLOR := Color(0.55, 0.92, 1.0)
+## Heavy cut for the backbox readout, the score popups and the completion
+## banner. Body text uses the project default font and needs no reference.
+const DISPLAY_FONT := preload("res://resources/font_display.tres")
 var _targets: Array = []      # drop-target blocks; see _build_target_visuals
 var _lights: Array = []       # rollover discs; see _build_rollover_visuals
 var _spinners: Array = []   # spinner blades; see _build_spinner_visuals
@@ -399,6 +402,7 @@ func _on_bank_completed(at: Vector2) -> void:
 func _on_points_scored(points: int, at: Vector2) -> void:
 	var lbl := Label3D.new()
 	lbl.text = "+%d" % points
+	lbl.font = DISPLAY_FONT
 	lbl.font_size = 110
 	lbl.outline_size = 26
 	lbl.modulate = Color(1.0, 0.88, 0.2)
@@ -1174,6 +1178,7 @@ func _build_backbox_display(l: float) -> void:
 func _backbox_label(text: String, size: int, col: Color, pos: Vector3) -> Label3D:
 	var lbl := Label3D.new()
 	lbl.text = text
+	lbl.font = DISPLAY_FONT
 	lbl.font_size = size
 	lbl.pixel_size = 0.012
 	lbl.modulate = col
@@ -1337,6 +1342,7 @@ func _mission_banner(title: String) -> void:
 	var centre := _table_to_world(Vector2(table_size.x * 0.5, table_size.y * 0.6))
 	var lbl := Label3D.new()
 	lbl.text = "%s\nCOMPLETE" % title
+	lbl.font = DISPLAY_FONT
 	lbl.font_size = 170
 	# Near-white on a heavy dark outline. The accent yellow read as muddy orange
 	# against the dark playfield and the confetti in front of it.
@@ -1765,51 +1771,99 @@ func _build_kicker_visuals() -> void:
 				k.flashed.connect(_on_kicker_flashed.bind(mesh, mesh.scale))
 
 
-## A pop bumper: skirt drum, bright cap, and a glowing collar.
+## A pop bumper, built as the real thing is: a base ring on the playfield, a
+## short skirt, a slim post, and a wide domed cap overhanging it. The mushroom
+## silhouette - cap WIDER than what holds it up - is what makes it read as a
+## bumper. An earlier version was a single steeply tapered cylinder with a small
+## dome on top, which just read as a traffic cone. It was also positioned so half
+## of it sat below the board (the builder set a y offset the caller then
+## overwrote), leaving only the narrow end showing.
+##
+## Everything is a CHILD of an empty root at board level, so the caller can place
+## the root on any tier without having to know the bumper's internal layout.
 func _build_bumper_drum(radius: float, col: Color) -> MeshInstance3D:
 	var root := MeshInstance3D.new()
+	var h := bumper_height
+
+	# Base ring sitting flat on the board, a little wider than the cap.
+	var collar := MeshInstance3D.new()
+	var ring := TorusMesh.new()
+	ring.inner_radius = radius * 0.96
+	ring.outer_radius = radius * 1.14
+	collar.mesh = ring
+	collar.position.y = h * 0.03
+	collar.material_override = _emissive_mat(accent_bright, 1.8)
+	root.add_child(collar)
+
+	# Skirt: the part the ball actually strikes. Barely tapered - a strong taper
+	# is exactly what made this look conical.
+	var skirt := MeshInstance3D.new()
 	var body := CylinderMesh.new()
-	body.top_radius = radius * 0.62
-	body.bottom_radius = radius
-	body.height = bumper_height
-	root.mesh = body
-	root.position.y = bumper_height * 0.5
+	body.bottom_radius = radius * 0.97
+	body.top_radius = radius * 0.86
+	body.height = h * 0.5
+	skirt.mesh = body
+	skirt.position.y = h * 0.25
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = col
 	mat.roughness = 0.35
 	mat.metallic = 0.25
-	root.material_override = mat
+	skirt.material_override = mat
+	root.add_child(skirt)
 
+	# Narrow post, so the cap reads as overhanging rather than continuous.
+	var post := MeshInstance3D.new()
+	var stem := CylinderMesh.new()
+	stem.bottom_radius = radius * 0.34
+	stem.top_radius = radius * 0.30
+	stem.height = h * 0.22
+	post.mesh = stem
+	post.position.y = h * 0.61
+	post.material_override = _emissive_mat(col.lightened(0.15), 0.5)
+	root.add_child(post)
+
+	# Flattened dome cap - a full hemisphere reads as a ball on a stick.
 	var cap := MeshInstance3D.new()
 	var dome := SphereMesh.new()
-	dome.radius = radius * 0.62
-	dome.height = radius * 0.62
+	dome.radius = radius * 0.92
+	dome.height = radius * 0.78
 	dome.is_hemisphere = true
 	cap.mesh = dome
-	cap.position.y = bumper_height * 0.5
+	cap.position.y = h * 0.72
 	var cmat := StandardMaterial3D.new()
-	cmat.albedo_color = col.lightened(0.45)
+	# Restrained on purpose. Lit hard AND lightened, the cap blew out to a flat
+	# white blob under the environment glow - the dome shape and the bumper's own
+	# colour both disappeared. The cap should read as coloured plastic lit from
+	# within, not as a lamp.
+	cmat.albedo_color = col.lightened(0.22)
+	cmat.roughness = 0.22
 	cmat.emission_enabled = true
 	cmat.emission = col
-	cmat.emission_energy_multiplier = 1.6
+	cmat.emission_energy_multiplier = 0.5
 	cap.material_override = cmat
 	root.add_child(cap)
 
-	var collar := MeshInstance3D.new()
-	var ring := TorusMesh.new()
-	ring.inner_radius = radius * 0.94
-	ring.outer_radius = radius * 1.06
-	collar.mesh = ring
-	collar.position.y = -bumper_height * 0.5 + 0.012
-	var omat := StandardMaterial3D.new()
-	omat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	omat.albedo_color = accent_bright
-	omat.emission_enabled = true
-	omat.emission = accent_bright
-	omat.emission_energy_multiplier = 1.8
-	collar.material_override = omat
-	root.add_child(collar)
+	# Bright rim around the cap's lower edge - the lit band on a real bumper cap,
+	# and what makes it pop against the board under the neon lighting.
+	var rim := MeshInstance3D.new()
+	var rimring := TorusMesh.new()
+	rimring.inner_radius = radius * 0.86
+	rimring.outer_radius = radius * 0.98
+	rim.mesh = rimring
+	rim.position.y = h * 0.74
+	rim.material_override = _emissive_mat(col.lightened(0.5), 1.5)
+	root.add_child(rim)
 	return root
+
+
+func _emissive_mat(col: Color, energy: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = col
+	m.emission_enabled = true
+	m.emission = col
+	m.emission_energy_multiplier = energy
+	return m
 
 
 ## Extrude a closed 2D collision polygon into a solid wedge (walls + top cap).

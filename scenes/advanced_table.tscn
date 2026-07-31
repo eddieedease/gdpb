@@ -34,14 +34,14 @@ size = Vector2(1280, 2560)
 [sub_resource type="Curve2D" id="Curve2D_ai1wt"]
 resource_local_to_scene = true
 _data = {
-"points": PackedVector2Array(0, 0, 0, 0, -189.11853, 131.45166, 0, 0, 0, 0, 385.9568, -251.7492, -104.75783, 57.57081, 104.75783, -57.57081, 517.2638, -335.12024, 125.576096, -70.971634, -125.576096, 70.971634, 684.14417, -89.06592, 0, 0, 0, 0, -83.04785, 292.9348)
+"points": PackedVector2Array(0, 0, 0, 0, -189.11853, 131.45166, 0, 0, 0, 0, 385.9568, -251.7492, -100.77938, 63.31911, 100.77938, -63.31911, 517.2638, -335.12024, 125.576096, -70.971634, -125.576096, 70.971634, 684.14417, -89.06592, 0, 0, 0, 0, -83.04785, 292.9348)
 }
 point_count = 5
 
 [sub_resource type="Curve2D" id="Curve2D_tgrry"]
 resource_local_to_scene = true
 _data = {
-"points": PackedVector2Array(0, 0, 0, 0, 117.737915, 51.601837, 125.7499, -413.53815, -125.7499, 413.53815, 1139.8567, 226.8228)
+"points": PackedVector2Array(0, 0, 0, 0, 117.737915, 51.601837, -7.96653, -468.33472, 7.96653, 468.33472, 1115.7448, 248.69998)
 }
 point_count = 2
 
@@ -90,7 +90,7 @@ script = ExtResource("2_0ua1b")
 [node name="BallSpawn" type="Marker2D" parent="." unique_id=257382769]
 position = Vector2(1120, 2360)
 
-[node name="BallEntry" type="Marker2D" parent="."]
+[node name="BallEntry" type="Marker2D" parent="." unique_id=2114343637]
 position = Vector2(640, 300)
 
 [node name="WallLeft" parent="." unique_id=1669833305 instance=ExtResource("5_6qs8c")]
@@ -136,11 +136,11 @@ rotation = 0.5296634
 
 [node name="Bumper4" parent="." unique_id=260161831 instance=ExtResource("7_t1bve")]
 modulate = Color(0.7, 0.85, 1, 1)
-position = Vector2(173, 1080)
+position = Vector2(159, 1131)
 
 [node name="Bumper7" parent="." unique_id=1159808320 instance=ExtResource("7_t1bve")]
 modulate = Color(0.8, 1, 0.85, 1)
-position = Vector2(216, 528.9999)
+position = Vector2(289, 528.9999)
 rotation = 0.10427204
 
 [node name="Bumper8" parent="." unique_id=529326980 instance=ExtResource("7_t1bve")]
@@ -240,6 +240,7 @@ curve = SubResource("Curve2D_ai1wt")
 channel_width = 50.0
 mouth_flare = 0.885
 smoothness = 2.982
+channel_color = Color(0, 0.8117647, 0.85882354, 0.85490197)
 
 [node name="Rail" parent="." unique_id=470856065 instance=ExtResource("16_rail")]
 position = Vector2(215.99998, 1345)
@@ -248,6 +249,7 @@ curve = SubResource("Curve2D_tgrry")
 
 [node name="Ambiance" type="CanvasLayer" parent="." unique_id=692629535]
 layer = 5
+visible = false
 
 [node name="Vignette" type="ColorRect" parent="Ambiance" unique_id=77046938]
 modulate = Color(1, 1, 1, 0.34117648)

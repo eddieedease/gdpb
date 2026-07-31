@@ -1,0 +1,11 @@
+[gd_resource type="SystemFont" format=3]
+
+; The heavy cut of the body font, for headings, the marquee, the big score and
+; the +N popups - anything that should shout rather than inform. Same families
+; as font_body.tres so the two never look like different typefaces.
+
+[resource]
+font_names = PackedStringArray("Trebuchet MS", "Candara", "Segoe UI", "DejaVu Sans")
+font_weight = 700
+antialiasing = 1
+subpixel_positioning = 1
